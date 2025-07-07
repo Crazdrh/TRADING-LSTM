@@ -43,9 +43,10 @@ label_to_class = {
     "strong_sell": 0,
     "sell": 1,
     "weak_sell": 2,
-    "weak_buy": 3,
-    "buy": 4,
-    "strong_buy": 5
+     "hold": 3,
+    "weak_buy": 4,
+    "buy": 5,
+    "strong_buy": 6
 }
 
 def load_data_from_dir(data_dir):

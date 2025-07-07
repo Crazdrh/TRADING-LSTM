@@ -1,6 +1,6 @@
 # TRADING-LSTM
 
-A modular, end-to-end trading pipeline using an LSTM-based neural network for multi-timeframe stock prediction, with optional reinforcement learning fine-tuning, robust backtesting, and walk-forward retraining.
+A modular, end-to-end trading pipeline using an LSTM-based neural network for multi-timeframe stock prediction.
 
 Features:
 
@@ -8,8 +8,6 @@ Features:
     Supervised training with the custom LSTMTradingModel for multi-class buy/sell signals
     Backtest with simulated trading, performance stats, and risk controls
     Hyperparameter tuning with grid search
-    Reinforcement learning (RL) fine-tuning (optional, OpenAI Gym compatible)
-    Walk-forward retraining every 3 months for robust evaluation
     Live/paper trading signal generation on new CSV data
     Modular, reusable codebase (each stage is its own script/module)
 
@@ -30,8 +28,6 @@ Project Structure:
     │   ├── train_lstm.py
     │   ├── backtest.py
     │   ├── hyperparameter_tune.py
-    │   ├── rl_finetune.py
-    │   ├── walk_forward_test.py
     │   └── generate_signal.py
     ├── latest_signal.txt    # Most recent live/paper trading signal
     ├── README.md

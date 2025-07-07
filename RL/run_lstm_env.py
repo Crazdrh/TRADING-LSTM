@@ -48,3 +48,5 @@ for episode in range(num_episodes):
         env.render()
         obs = next_obs
         step += 1
+# After training your model...
+torch.save(model.state_dict(), "./trained_lstm.pth")

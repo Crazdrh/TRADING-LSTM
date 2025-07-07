@@ -66,12 +66,14 @@ for idx in range(seq_length, data_length):
     pred_class = int(pred_class_tensor.item())
     pred_label = class_to_label.get(pred_class, "")
     # Determine position: long for any 'buy' signal, short for any 'sell' signal
-    if "buy" in pred_label:
-        position = 1  # go long
+    if pred_label == "hold":
+        position = 0
+    elif "buy" in pred_label:
+        position = 1
     elif "sell" in pred_label:
-        position = -1  # go short
+        position = -1
     else:
-        position = 0   # (should not happen if signals are defined)
+        position = 0
     # Calculate profit for this step
     # Use future_return from data if available, otherwise compute from close price
     if "future_return" in test_df.columns:

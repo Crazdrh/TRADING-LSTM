@@ -4,10 +4,10 @@ import pandas as pd
 # === CONFIGURATION ===
 csv_dir = "C:/Users/Hayden/Downloads/csv/"      # <-- Change to your actual directory
 lookahead = 5                       # bars ahead for 'future' labeling
-strong_buy_thresh = 0.04
-buy_thresh = 0.02
-strong_sell_thresh = -0.04
-sell_thresh = -0.02
+strong_buy_thresh = 0.01
+buy_thresh = 0.002
+strong_sell_thresh = -0.001
+sell_thresh = -0.002
 
 label_to_class = {
     "strong_buy": 0,

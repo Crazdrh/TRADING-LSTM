@@ -6,7 +6,7 @@ csv_dir = "C:/Users/Hayden/Downloads/csv/"      # <-- Change to your actual dire
 lookahead = 5                       # bars ahead for 'future' labeling
 strong_buy_thresh = 0.01
 buy_thresh = 0.002
-strong_sell_thresh = -0.001
+strong_sell_thresh = -0.01
 sell_thresh = -0.002
 
 label_to_class = {

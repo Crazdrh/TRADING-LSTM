@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class ComplexLSTMModel(nn.Module):
     def __init__(self, input_dim=1, hidden_dim=64, num_layers=5, output_dim=1, dropout=0.3):
         super(ComplexLSTMModel, self).__init__()
@@ -19,10 +20,10 @@ class ComplexLSTMModel(nn.Module):
                     batch_first=True
                 )
             )
-        
+
         self.ln = nn.ModuleList([nn.LayerNorm(hidden_dim) for _ in range(num_layers - 1)])
         self.dropout = nn.Dropout(dropout)
-        
+
         # Complex output head
         self.fc1 = nn.Linear(hidden_dim, hidden_dim)
         self.relu = nn.ReLU()
@@ -45,10 +46,10 @@ class ComplexLSTMModel(nn.Module):
         out = self.fc2(out)
         return out
 
+
 # Example usage
 if __name__ == "__main__":
     model = ComplexLSTMModel()
     x = torch.randn(8, 50, 1)  # batch, seq, feature
     out = model(x)
     print(out.shape)  # (8, 1)
-

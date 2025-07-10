@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class ComplexLSTMModel(nn.Module):
-    def __init__(self, input_dim=5, hidden_dim=128, num_layers=5, output_dim=1, dropout=0.3):
+    def __init__(self, input_dim=8, hidden_dim=128, num_layers=5, output_dim=3, dropout=0.3):
         super(ComplexLSTMModel, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers

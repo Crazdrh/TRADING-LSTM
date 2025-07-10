@@ -1,101 +1,69 @@
-import os
-import glob
 import pandas as pd
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
-from LSTM import ComplexLSTMModel
+from LSTM import ComplexLSTMModel  # Make sure this matches your training model
 
-# --------------- CONFIG ----------------
-TEST_DATA_DIR = "C:/Users/Hayden/Downloads/csv"  # change this to your test CSV dir
-SEQ_LEN = 50
-BATCH_SIZE = 32
+# --------- CONFIG ---------
+CSV_PATH = "C:/Users/Hayden/Downloads/YOUR_FILE.csv"   # <-- Update
 MODEL_PATH = "C:/Users/Hayden/Downloads/trained_lstm_model2.pth"
+SEQ_LEN = 50
 
-# --------------- DEVICE ----------------
+# --------- DEVICE ---------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
 
-# ----------- LOAD CSVS -----------
-def load_all_csvs(data_dir):
-    csv_files = glob.glob(os.path.join(data_dir, "*.csv"))
-    df_list = []
-    for f in csv_files:
-        try:
-            df = pd.read_csv(f)
-            df_list.append(df)
-        except Exception as e:
-            print(f"Error loading {f}: {e}")
-    if not df_list:
-        raise ValueError("No CSV files found in directory or all failed to load.")
-    combined = pd.concat(df_list, ignore_index=True)
-    return combined
-
-# ----------- DATASET -----------
-class PriceDataset(Dataset):
-    def __init__(self, df, seq_len=SEQ_LEN):
-        col_candidates = ['close', 'Close', 'CLOSE']
-        close_col = next((col for col in col_candidates if col in df.columns), None)
-        if close_col is None:
-            raise ValueError(f"None of the expected close price columns {col_candidates} found in CSV files.")
-        prices = df[close_col].values.astype(float)
-        prices = (prices - np.mean(prices)) / (np.std(prices) + 1e-8)
-        self.X = []
-        self.y = []
-        for i in range(len(prices) - seq_len - 1):
-            seq = prices[i:i+seq_len]
-            next_price = prices[i+seq_len]
-            last_price = prices[i+seq_len-1]
-            change = next_price - last_price
-            if change > 0.02:
-                label = 2   # strong_buy
-            elif change > 0.005:
-                label = 1   # buy
-            elif change < -0.02:
-                label = -2  # strong_sell
-            elif change < -0.005:
-                label = -1  # sell
-            else:
-                label = 0   # hold
-            self.X.append(seq.reshape(-1, 1))
-            self.y.append(label)
-        self.X = torch.tensor(np.array(self.X), dtype=torch.float32)
-        self.y = np.array(self.y)  # keep as numpy for easy display
-    def __len__(self):
-        return len(self.X)
-    def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
-
-# ----------- LABEL MAPS -----------
-idx_to_label = {0: -2, 1: -1, 2: 0, 3: 1, 4: 2}
-label_name = {-2: "strong_sell", -1: "sell", 0: "hold", 1: "buy", 2: "strong_buy"}
-
-# ------------- MAIN --------------
-if __name__ == "__main__":
-    # 1. Load model
-    model = ComplexLSTMModel(input_dim=1, output_dim=5)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+# --------- LOAD MODEL ---------
+def load_model(model_path, n_classes):
+    model = ComplexLSTMModel(input_dim=4, output_dim=n_classes)
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()
+    return model
 
-    # 2. Load test data
-    df = load_all_csvs(TEST_DATA_DIR)
-    print(f"Loaded {len(df)} rows for testing.")
-    dataset = PriceDataset(df)
-    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False)
+# --------- LOAD & PREP DATA ---------
+def load_and_preprocess(csv_path):
+    df = pd.read_csv(csv_path)
+    df.columns = [c.lower() for c in df.columns]
+    for col in ['open', 'high', 'low', 'close']:
+        if col not in df.columns:
+            raise ValueError(f"Missing required column: {col}")
+    # Normalize as in training (fit only on inference file)
+    features = df[['open', 'high', 'low', 'close']].astype(float).values
+    means = features.mean(axis=0)
+    stds = features.std(axis=0) + 1e-8
+    features_norm = (features - means) / stds
+    return df, features_norm
 
-    # 3. Inference and print results
-    print(f"{'Index':<8} {'Predicted':<12} {'Actual':<12}")
-    print("-"*35)
-    idx_base = 0
-    with torch.no_grad():
-        for batch_x, batch_y in loader:
-            batch_x = batch_x.to(device)
-            logits = model(batch_x)
-            preds = torch.argmax(logits, dim=1).cpu().numpy()
-            for i in range(len(preds)):
-                pred_idx = preds[i]
-                pred_label = idx_to_label[pred_idx]
-                actual_label = batch_y[i]
-                print(f"{idx_base + i:<8} {label_name[pred_label]:<12} {label_name[int(actual_label)]:<12}")
-            idx_base += len(preds)
+# --------- INFERENCE ---------
+def predict_over_csv(model, features, df, seq_len=SEQ_LEN):
+    results = []
+    n_classes = model.output_dim if hasattr(model, "output_dim") else None
+    for i in range(len(features) - seq_len):
+        seq = features[i:i+seq_len]
+        x = torch.tensor(seq, dtype=torch.float32).unsqueeze(0).to(device)  # (1, seq_len, 4)
+        with torch.no_grad():
+            logits = model(x)
+            pred_class = logits.argmax(dim=1).item()
+        # Print row number, date if available, and predicted class
+        row_num = i + seq_len
+        date = df['date'].iloc[row_num] if 'date' in df.columns else row_num
+        actual = df['signal_class'].iloc[row_num] if 'signal_class' in df.columns else None
+        results.append((row_num, date, pred_class, actual))
+    return results
+
+# --------- MAIN ---------
+if __name__ == "__main__":
+    # 1. Load and preprocess data
+    df, features = load_and_preprocess(CSV_PATH)
+    n_classes = int(df['signal_class'].nunique()) if 'signal_class' in df.columns else 3  # Default 3 classes
+
+    # 2. Load model
+    model = load_model(MODEL_PATH, n_classes)
+
+    # 3. Run predictions
+    results = predict_over_csv(model, features, df, seq_len=SEQ_LEN)
+
+    # 4. Print output
+    print("row_num\tdate\t\tpredicted\tactual")
+    for row_num, date, pred, actual in results:
+        print(f"{row_num}\t{date}\t{pred}\t\t{actual}")
+

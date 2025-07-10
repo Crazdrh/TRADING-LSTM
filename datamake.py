@@ -8,8 +8,8 @@ buy_thresh = 0.002      # 0.2%
 sell_thresh = -0.002    # -0.2%
 
 label_to_class = {
-    "buy": 0,
-    "hold": 1,
+    "buy": 1,
+    "hold": 0,
     "sell": 2
 }
 

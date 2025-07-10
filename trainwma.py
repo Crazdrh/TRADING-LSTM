@@ -8,10 +8,10 @@ from torch.utils.data import Dataset, DataLoader
 from LSTM import ComplexLSTMModel
 
 # --- CONFIG ---
-DATA_DIR = "C:/Users/Hayden/Downloads/csv"  # Update path
+DATA_DIR = "C:/Users/Hayden/Downloads/5mincsvma"  # Update path
 SEQ_LEN = 50
-BATCH_SIZE = 1000
-EPOCHS = 10
+BATCH_SIZE = 128
+EPOCHS = 1
 LR = 0.001
 MODEL_SAVE_PATH = "C:/Users/Hayden/Downloads/trained_lstm_model_with_ma.pth"
 

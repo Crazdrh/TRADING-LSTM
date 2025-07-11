@@ -99,3 +99,4 @@ if __name__ == "__main__":
 
     torch.save(model.state_dict(), MODEL_SAVE_PATH)
     print(f"Model saved to {MODEL_SAVE_PATH}")
+

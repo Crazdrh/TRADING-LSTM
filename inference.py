@@ -4,8 +4,8 @@ import torch
 from LSTM import ComplexLSTMModel
 
 # --------- CONFIG ---------
-CSV_PATH = "C:/Users/Hayden/Downloads/5mincsvma/BATS_NVDA, 5_afc69.csv"   # <-- Update
-MODEL_PATH = "C:/Users/Hayden/Downloads/trained_lstm_model_with_ma.pth"
+CSV_PATH = "/home/hayden/LSTM/Data/CSV/BATS_AAPL, 5.csv"   # <-- Update
+MODEL_PATH = "/home/hayden/LSTM/Ckpt/final_model_weights.pth"
 SEQ_LEN = 50
 FEATURE_COLS = ['open', 'high', 'low', 'close', 'MA', 'MA.1', 'MA.2', 'MA.3', 'MA.4']
 
@@ -52,5 +52,4 @@ if __name__ == "__main__":
     print("row_num\tdate\t\tpredicted\tactual")
     for row_num, date, pred, actual in results:
         print(f"{row_num}\t{date}\t{pred}\t\t{actual}")
-
 

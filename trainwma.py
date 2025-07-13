@@ -8,17 +8,16 @@ from torch.utils.data import Dataset, DataLoader
 from LSTM import ComplexLSTMModel
 
 # --- CONFIG ---
-DATA_DIR = "C:/Users/Hayden/Downloads/5mincsvma"  # Update path
+DATA_DIR = "/home/hayden/LSTM/Data/CSV"  # Update path
 SEQ_LEN = 50
-BATCH_SIZE = 128
+BATCH_SIZE = 1000
 EPOCHS = 1
 LR = 0.001
-MODEL_SAVE_PATH = "C:/Users/Hayden/Downloads/trained_lstm_model_with_ma.pth"
+MODEL_SAVE_PATH = "/home/hayden/LSTM/Ckpt/trained_lstm_model_with_ma.pth"
 
-# --- DEVICE & AMP ---
+# --- DEVICE ---
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-use_amp = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-print(f"Using device: {device} | bf16 AMP: {use_amp}")
+print(f"Using device: {device} | Precision: FP32")
 
 # --- LOAD ALL CSVs ---
 def load_all_csvs(data_dir):
@@ -44,7 +43,7 @@ class PriceDataset(Dataset):
             if col not in df.columns:
                 raise ValueError(f"Missing column: {col}")
 
-        features = df[feature_cols].values.astype(float)
+        features = df[feature_cols].values.astype(np.float32)
         means = features.mean(axis=0)
         stds = features.std(axis=0) + 1e-8
         features = (features - means) / stds
@@ -74,6 +73,7 @@ if __name__ == "__main__":
 
     n_classes = int(df['signal_class'].dropna().nunique())
     model = ComplexLSTMModel(input_dim=9, output_dim=n_classes).to(device)
+    model = model.float()  # Ensure FP32 model
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
@@ -81,16 +81,11 @@ if __name__ == "__main__":
         model.train()
         total_loss = 0
         for batch_x, batch_y in loader:
-            batch_x = batch_x.to(device)
+            batch_x = batch_x.to(device, dtype=torch.float32)  # Always float32
             batch_y = batch_y.to(device)
             optimizer.zero_grad()
-            if use_amp:
-                with torch.cuda.amp.autocast(dtype=torch.bfloat16):
-                    logits = model(batch_x)
-                    loss = loss_fn(logits, batch_y)
-            else:
-                logits = model(batch_x)
-                loss = loss_fn(logits, batch_y)
+            logits = model(batch_x)
+            loss = loss_fn(logits, batch_y)
             loss.backward()
             optimizer.step()
             total_loss += loss.item() * batch_x.size(0)
@@ -99,4 +94,3 @@ if __name__ == "__main__":
 
     torch.save(model.state_dict(), MODEL_SAVE_PATH)
     print(f"Model saved to {MODEL_SAVE_PATH}")
-

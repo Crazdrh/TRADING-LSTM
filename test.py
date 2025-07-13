@@ -5,8 +5,8 @@ import torch
 from LSTM import ComplexLSTMModel  # Make sure this matches your model file
 
 # ==== CONFIGURATION ====
-CSV_DIR = "C:/Users/Hayden/Downloads/5mincsvma"  # Directory with your 20 test CSVs
-MODEL_PATH = "C:/Users/Hayden/Downloads/trained_lstm_model_with_ma.pth"
+CSV_DIR = "/home/hayden/LSTM/Data/CSV/"  # Directory with your 20 test CSVs
+MODEL_PATH = "/home/hayden/LSTM/Ckpt/final_model_weights.pth"
 SEQ_LEN = 50
 INPUT_COLS = ['open', 'high', 'low', 'close', 'ma', 'ma.1', 'ma.2', 'ma.3', 'ma.4']  # Fixed: lowercase
 

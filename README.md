@@ -689,4 +689,68 @@ With proper implementation:
 - **Memory usage**: 60-80% reduction with FSDP
 - **Inference speed**: 10-50ms per sequence
 
+
+Training time on 4x GTX Titan X (Pascal) in FP32 depends heavily on your dataset size and training configuration. Let me break down the key factors:
+Model Complexity Analysis
+Parameter Count: ~2-5 million parameters (estimated based on the architecture)
+
+Input projection: 9 × 256 = 2,304
+Positional encoding: 0 (no trainable params)
+Temporal convolutions: ~500K parameters
+BiLSTM blocks (4 layers): ~2M parameters
+Attention layers: ~1M parameters
+Output heads: ~500K parameters
+
+Memory Requirements:
+
+Model parameters: ~20-40 MB
+Gradients: ~20-40 MB
+Optimizer states (Adam): ~60-120 MB
+Activations: Depends on batch size and sequence length
+
+Hardware Specifications (GTX Titan X Pascal)
+Per GPU:
+
+Memory: 12 GB GDDR5X
+FP32 Performance: ~11 TFLOPS
+Memory Bandwidth: 480 GB/s
+CUDA Cores: 3584
+
+4x Setup:
+
+Total Memory: 48 GB
+Total Compute: ~44 TFLOPS
+Parallelization: Data parallel across GPUs
+
+Training Time Estimates
+Scenario 1: Small Dataset (10K samples)
+Batch size: 32 per GPU (128 total)
+Sequence length: 50
+Epochs: 100
+Steps per epoch: 10,000 / 128 ≈ 78
+
+Forward pass per sample: ~5-10ms
+Backward pass per sample: ~10-20ms
+Total per sample: ~15-30ms
+
+Time per epoch: 78 × 30ms × 128 = ~5 minutes
+Total training: 100 epochs × 5 minutes = ~8 hours
+Scenario 2: Medium Dataset (100K samples)
+Batch size: 32 per GPU (128 total)
+Sequence length: 50
+Epochs: 50
+Steps per epoch: 100,000 / 128 ≈ 781
+
+Time per epoch: 781 × 30ms × 128 = ~50 minutes
+Total training: 50 epochs × 50 minutes = ~42 hours
+Scenario 3: Large Dataset (1M samples)
+Batch size: 32 per GPU (128 total)
+Sequence length: 50
+Epochs: 20
+Steps per epoch: 1,000,000 / 128 ≈ 7,812
+
+Time per epoch: 7,812 × 30ms × 128 = ~8 hours
+Total training: 20 epochs × 8 hours = ~160 hours (6.7 days)
+
+
 The combination of sophisticated architecture, distributed training, and advanced optimization techniques makes this LSTM capable of achieving state-of-the-art performance on complex sequential pattern recognition tasks.

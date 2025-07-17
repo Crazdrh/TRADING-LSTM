@@ -1,0 +1,12 @@
+torch
+torchvision
+torchaudio
+pandas
+numpy
+scikit-learn
+argparse
+datetime
+alpaca-py
+polygon
+alpaca-trade-api
+polygon-api-client

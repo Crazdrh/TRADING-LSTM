@@ -4,10 +4,10 @@ import torch
 from LSTM import ComplexLSTMModel
 
 # --------- CONFIG ---------
-CSV_PATH = "/home/hayden/LSTM/Data/CSV/BATS_AAPL, 5.csv"   # <-- Update
-MODEL_PATH = "/home/hayden/LSTM/Ckpt/final_model_weights.pth"
+CSV_PATH = "C:/Users/Hayden/LSTM/alpaca/nvda_5minla.csv"   # <-- Update
+MODEL_PATH = "C:/Users/hayden/LSTM/ckpt/1/"
 SEQ_LEN = 50
-FEATURE_COLS = ['open', 'high', 'low', 'close', 'MA', 'MA.1', 'MA.2', 'MA.3', 'MA.4']
+FEATURE_COLS = ['open', 'high', 'low', 'close','volume', 'ma_5', 'ma_10', 'ma_20', 'ma_40', 'ma_55']
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -52,4 +52,3 @@ if __name__ == "__main__":
     print("row_num\tdate\t\tpredicted\tactual")
     for row_num, date, pred, actual in results:
         print(f"{row_num}\t{date}\t{pred}\t\t{actual}")
-

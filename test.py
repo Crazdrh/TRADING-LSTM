@@ -2,53 +2,43 @@ import os
 import numpy as np
 import pandas as pd
 import torch
-from LSTM import ComplexLSTMModel  # Make sure this matches your model file
+from LSTM import ComplexLSTMModel
 
 # ==== CONFIGURATION ====
-CSV_DIR = "/home/hayden/LSTM/Data/CSV/"  # Directory with your 20 test CSVs
-MODEL_PATH = "/home/hayden/LSTM/Ckpt/final_model_weights.pth"
+CSV_DIR = "/lambda/nfs/LSTM/Lstm/data/alpaca"    # Directory with your test CSVs
+MODEL_PATH = "/lambda/nfs/LSTM/Lstm/ckpt/1/best_model.pth"
 SEQ_LEN = 50
-INPUT_COLS = ['open', 'high', 'low', 'close', 'ma', 'ma.1', 'ma.2', 'ma.3', 'ma.4']  # Fixed: lowercase
+INPUT_COLS = ['open', 'high', 'low', 'close', 'volume','ma_5', 'ma_10', 'ma_20', 'ma_40', 'ma_55']  # 9 features
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-# ==== LOAD MODEL ====
 def load_model(model_path, n_classes):
-    model = ComplexLSTMModel(input_dim=9, output_dim=n_classes)
+    model = ComplexLSTMModel(input_dim=10, output_dim=n_classes)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()
     return model
 
 
-# ==== PREPROCESSING ====
 def preprocess_features(df):
-    # Lowercase column names for consistency
     df.columns = [c.lower() for c in df.columns]
-
-    # Check if all required columns exist
     missing_cols = [col for col in INPUT_COLS if col not in df.columns]
     if missing_cols:
         raise KeyError(f"Missing columns after lowercasing: {missing_cols}")
-
     features = df[INPUT_COLS].astype(float).values
-    # Normalize per-file as in your train/inference scripts
     means = features.mean(axis=0)
     stds = features.std(axis=0) + 1e-8
     features_norm = (features - means) / stds
     return features_norm
 
 
-# ==== PREDICT AND EVALUATE ====
 def test_on_file(model, df, features, seq_len=SEQ_LEN):
-    preds = []
-    trues = []
+    preds, trues, rows, dates = [], [], [], []
 
-    # Make sure we have enough data
     if len(features) <= seq_len:
         print(f"Warning: Not enough data points ({len(features)}) for sequence length {seq_len}")
-        return np.nan, 0, np.array([]), np.array([])
+        return np.nan, 0, np.array([]), np.array([]), []
 
     for i in range(len(features) - seq_len):
         seq = features[i:i + seq_len]
@@ -59,22 +49,22 @@ def test_on_file(model, df, features, seq_len=SEQ_LEN):
         true_class = int(df['signal_class'].iloc[i + seq_len])
         preds.append(pred_class)
         trues.append(true_class)
-
+        rows.append(i + seq_len)
+        if 'date' in df.columns:
+            dates.append(df['date'].iloc[i + seq_len])
+        else:
+            dates.append(None)
     preds = np.array(preds)
     trues = np.array(trues)
     accuracy = (preds == trues).mean() if len(preds) > 0 else np.nan
-    return accuracy, len(preds), preds, trues
+    return accuracy, len(preds), preds, trues, list(zip(rows, dates))
 
-
-# ==== MAIN LOOP ====
 if __name__ == "__main__":
     files = [f for f in os.listdir(CSV_DIR) if f.endswith('.csv')]
     if not files:
         print(f"No CSV files found in '{CSV_DIR}'!")
         exit(1)
 
-    # Assume all files use the same class mapping (0=hold, 1=buy, 2=sell based on your data)
-    # Read one file to infer class count
     temp_df = pd.read_csv(os.path.join(CSV_DIR, files[0]))
     n_classes = int(temp_df['signal_class'].nunique())
     print(f"Detected {n_classes} classes in the data")
@@ -84,6 +74,9 @@ if __name__ == "__main__":
 
     all_preds = []
     all_trues = []
+    all_rows = []
+    all_dates = []
+    all_files = []
     total_samples = 0
     successful_files = 0
 
@@ -94,14 +87,29 @@ if __name__ == "__main__":
         try:
             df = pd.read_csv(fpath)
             features = preprocess_features(df)
-            acc, n, preds, trues = test_on_file(model, df, features, seq_len=SEQ_LEN)
+            acc, n, preds, trues, row_date_pairs = test_on_file(model, df, features, seq_len=SEQ_LEN)
 
-            if n > 0:  # Only count files with valid predictions
+            if n > 0:
                 total_samples += n
                 all_preds.append(preds)
                 all_trues.append(trues)
+                rows, dates = zip(*row_date_pairs)
+                all_rows.append(rows)
+                all_dates.append(dates)
+                all_files.extend([fname] * n)
                 successful_files += 1
                 print(f"{fname}: {acc * 100:.2f}% accuracy on {n} samples")
+
+                # Save per-file predictions to CSV
+                out_df = pd.DataFrame({
+                    'row_num': rows,
+                    'date': dates,
+                    'predicted': preds,
+                    'actual': trues
+                })
+                out_csv = os.path.join(CSV_DIR, f"{os.path.splitext(fname)[0]}_preds.csv")
+                out_df.to_csv(out_csv, index=False)
+                print(f"  Saved per-file results to: {out_csv}")
             else:
                 print(f"{fname}: No valid predictions (insufficient data)")
 
@@ -109,10 +117,13 @@ if __name__ == "__main__":
             print(f"{fname}: ERROR - {str(e)}")
             continue
 
-    # ==== OVERALL ACCURACY ====
+    # ==== OVERALL ACCURACY AND SAVE COMBINED CSV ====
     if successful_files > 0:
         all_preds = np.concatenate(all_preds)
         all_trues = np.concatenate(all_trues)
+        all_rows = np.concatenate(all_rows)
+        all_dates = np.concatenate(all_dates)
+
         overall_acc = (all_preds == all_trues).mean()
 
         print("\n" + "=" * 50)
@@ -121,13 +132,24 @@ if __name__ == "__main__":
         print(f"Total samples: {len(all_preds)}")
         print(f"Overall accuracy: {overall_acc * 100:.2f}%")
 
-        # Class distribution
+        # Save combined results to one CSV
+        all_results_df = pd.DataFrame({
+            "file": all_files,
+            "row_num": all_rows,
+            "date": all_dates,
+            "predicted": all_preds,
+            "actual": all_trues,
+        })
+        all_results_csv = os.path.join(CSV_DIR, "all_test_results.csv")
+        all_results_df.to_csv(all_results_csv, index=False)
+        print(f"\nSaved combined test results to: {all_results_csv}")
+
+        # ...rest of your printouts for class distribution & per-class accuracy...
         unique_classes, counts = np.unique(all_trues, return_counts=True)
         print(f"\nClass distribution in test data:")
         for cls, count in zip(unique_classes, counts):
             print(f"  Class {cls}: {count} samples ({count / len(all_trues) * 100:.1f}%)")
 
-        # Per-class accuracy
         print(f"\nPer-class accuracy:")
         for cls in unique_classes:
             mask = all_trues == cls

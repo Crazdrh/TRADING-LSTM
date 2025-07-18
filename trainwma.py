@@ -204,7 +204,7 @@ def get_phase_config(phase_name):
             'name': 'PHASE 1: INITIAL TRAINING',
             'epochs': 50,
             'lr': 0.001,
-            'batch_size': 1000,
+            'batch_size': 2048,  # Increased from 1000
             'weight_decay': 1e-5,
             'grad_clip': 1.0,
             'ckpt_freq': 10,
@@ -215,7 +215,7 @@ def get_phase_config(phase_name):
             'name': 'PHASE 2: DEEP LEARNING',
             'epochs': 120,
             'lr': 0.0007,
-            'batch_size': 1000,
+            'batch_size': 2048,  # Increased from 1000
             'weight_decay': 2e-5,
             'grad_clip': 0.8,
             'ckpt_freq': 8,
@@ -226,7 +226,7 @@ def get_phase_config(phase_name):
             'name': 'PHASE 3: FINE-TUNING',
             'epochs': 180,
             'lr': 0.0003,
-            'batch_size': 800,
+            'batch_size': 1536,  # Increased from 800
             'weight_decay': 3e-5,
             'grad_clip': 0.5,
             'ckpt_freq': 5,
@@ -237,7 +237,7 @@ def get_phase_config(phase_name):
             'name': 'PHASE 4: FINAL OPTIMIZATION',
             'epochs': 220,
             'lr': 0.0001,
-            'batch_size': 600,
+            'batch_size': 1024,  # Increased from 600
             'weight_decay': 5e-5,
             'grad_clip': 0.3,
             'ckpt_freq': 3,
@@ -255,7 +255,7 @@ def print_phase_header(phase_config):
     print(f"{'='*60}")
     print(f"Description: {phase_config['description']}")
     print(f"Target Epochs: {phase_config['epochs']}")
-    print(f"Learning Rate: {phase_config['lr']}")
+    print(f"Learning Rate: {phase_config['lr']} (FIXED - will not be reduced)")
     print(f"Batch Size: {phase_config['batch_size']}")
     print(f"Weight Decay: {phase_config['weight_decay']}")
     print(f"Gradient Clip: {phase_config['grad_clip']}")
@@ -264,9 +264,9 @@ def print_phase_header(phase_config):
 
 def main():
     parser = argparse.ArgumentParser(description='Enhanced LSTM Training with Multi-Phase Support')
-    parser.add_argument('--data-dir', type=str, default="C:/Users/Hayden/LSTM/alpaca/",
+    parser.add_argument('--data-dir', type=str, default="/lambda/nfs/LSTM/Lstm/data/alpaca",
                         help='Directory containing CSV files')
-    parser.add_argument('--save-dir', type=str, default="C:/Users/hayden/LSTM/ckpt/",
+    parser.add_argument('--save-dir', type=str, default="/lambda/nfs/LSTM/Lstm/ckpt/2/",
                         help='Directory to save models and checkpoints')
     parser.add_argument('--seq-len', type=int, default=50, help='Sequence length')
     
@@ -452,15 +452,15 @@ def run_training_phase(model, dataset, train_dataset, val_dataset, loss_fn, devi
         pin_memory=True
     )
 
-    # Optimizer and scheduler with phase-specific parameters
+    # Optimizer with phase-specific parameters - NO SCHEDULER
     optimizer = torch.optim.Adam(
         model.parameters(), 
         lr=phase_config['lr'], 
         weight_decay=phase_config['weight_decay']
     )
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=3
-    )
+    
+    # Remove the scheduler to maintain constant learning rate
+    scheduler = None
 
     # Resume from checkpoint if specified or exists
     start_epoch = 0
@@ -478,7 +478,7 @@ def run_training_phase(model, dataset, train_dataset, val_dataset, loss_fn, devi
         )
 
     # Training loop
-    print("Starting training...")
+    print(f"Starting training with FIXED learning rate: {phase_config['lr']}")
     training_history = {'train_loss': [], 'val_loss': [], 'val_accuracy': []}
     scaler = GradScaler()
 
@@ -529,7 +529,8 @@ def run_training_phase(model, dataset, train_dataset, val_dataset, loss_fn, devi
 
             # Progress logging
             if step % 50 == 0:
-                print(f"Epoch {epoch + 1}/{phase_config['epochs']}, Step {step + 1}/{len(train_loader)}, Loss: {loss.item():.5f}")
+                current_lr = optimizer.param_groups[0]['lr']
+                print(f"Epoch {epoch + 1}/{phase_config['epochs']}, Step {step + 1}/{len(train_loader)}, Loss: {loss.item():.5f}, LR: {current_lr:.6f}")
 
         # Calculate training metrics
         train_loss = total_loss / num_batches
@@ -550,14 +551,6 @@ def run_training_phase(model, dataset, train_dataset, val_dataset, loss_fn, devi
             for cls, acc in val_metrics['class_accuracies'].items():
                 samples_count = (val_metrics['targets'] == cls).sum()
                 print(f"  Class {cls} accuracy: {acc:.4f} ({samples_count} samples)")
-
-            # Learning rate scheduling
-            old_lr = optimizer.param_groups[0]['lr']
-            scheduler.step(val_metrics['loss'])
-            new_lr = optimizer.param_groups[0]['lr']
-
-            if old_lr != new_lr:
-                print(f"Learning rate reduced from {old_lr:.6f} to {new_lr:.6f}")
 
             # Save best model
             if val_metrics['loss'] < best_val_loss:

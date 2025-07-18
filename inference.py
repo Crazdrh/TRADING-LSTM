@@ -62,13 +62,12 @@ def create_sequences_vectorized(features, seq_len):
     n_samples = len(features) - seq_len
     if n_samples <= 0:
         return np.array([]), np.array([])
-    # Output should be (n_samples, seq_len, n_features)
-    sequences = np.lib.stride_tricks.sliding_window_view(
-        features, window_shape=(seq_len, features.shape[1])
-    )
-    # sequences.shape == (n_samples+1, 1, seq_len, n_features)
-    # We want (n_samples, seq_len, n_features)
-    sequences = sequences[:, 0, :, :]
+    # Shape: (n_samples, seq_len, n_features)
+    sequences = np.lib.stride_tricks.sliding_window_view(features, (seq_len, features.shape[1]))
+    # Fix extra dimension if present
+    if sequences.shape[1] == 1:
+        sequences = sequences[:, 0, :, :]
+    sequences = np.ascontiguousarray(sequences)
     indices = np.arange(seq_len, len(features))
     return sequences, indices
 

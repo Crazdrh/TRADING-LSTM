@@ -59,27 +59,19 @@ def load_and_preprocess(csv_path):
     return df, features_norm.astype(np.float32)
 
 def create_sequences_vectorized(features, seq_len):
-    """Create all sequences at once using vectorized operations"""
-    n_samples = len(features) - seq_len + 1
+    n_samples = len(features) - seq_len
     if n_samples <= 0:
         return np.array([]), np.array([])
-    
-    # Create sliding window view - much faster than loops
+    # Output should be (n_samples, seq_len, n_features)
     sequences = np.lib.stride_tricks.sliding_window_view(
         features, window_shape=(seq_len, features.shape[1])
-    ).squeeze(axis=1)
-    
-    # Make a copy to ensure it's writable and contiguous
-    sequences = sequences.copy()
-    
-    # Create corresponding indices (these are the row numbers we're predicting for)
+    )
+    # sequences.shape == (n_samples+1, 1, seq_len, n_features)
+    # We want (n_samples, seq_len, n_features)
+    sequences = sequences[:, 0, :, :]
     indices = np.arange(seq_len, len(features))
-    
-    # Ensure we have the right number of indices
-    if len(sequences) != len(indices):
-        indices = indices[:len(sequences)]
-    
     return sequences, indices
+
 
 def predict_batch_optimized(model, features, df, seq_len=SEQ_LEN, batch_size=BATCH_SIZE):
     """Optimized batch prediction with maximum GPU utilization"""

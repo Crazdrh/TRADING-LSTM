@@ -339,7 +339,7 @@ class ComplexLSTMModel(nn.Module):
 if __name__ == "__main__":
     # Create model
     model = ComplexLSTMModel(
-        input_dim=9,
+        input_dim=10,
         hidden_dim=256,
         num_lstm_layers=4,
         num_heads=8,

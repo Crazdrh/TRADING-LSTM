@@ -13,9 +13,10 @@ SEQ_LEN = 50
 FEATURE_COLS = ['open', 'high', 'low', 'close','volume', 'ma_5', 'ma_10', 'ma_20', 'ma_40', 'ma_55']
 
 # GPU Optimization Settings
-BATCH_SIZE = 1024  # Increase this based on your GPU memory
+BATCH_SIZE = 2048  # Increase this based on your GPU memory
 NUM_WORKERS = 4    # For faster data loading
 PIN_MEMORY = True  # Faster CPU->GPU transfer
+USE_MIXED_PRECISION = True  # Set to True for 2x speedup (may reduce accuracy slightly)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -33,8 +34,10 @@ def load_model(model_path, n_classes):
     model.to(device)
     model.eval()
     
-    # Enable optimizations
-    model = torch.jit.script(model)  # JIT compile for speed
+    # Enable half precision for 2x speedup (if your model supports it)
+    # Uncomment the next line if you want to try mixed precision
+    # model = model.half()
+    
     return model
 
 def load_and_preprocess(csv_path):
@@ -104,8 +107,13 @@ def predict_batch_optimized(model, features, df, seq_len=SEQ_LEN, batch_size=BAT
             # Move to GPU if not already there
             batch_sequences = batch_sequences.to(device, non_blocking=True)
             
-            # Batch inference
-            logits = model(batch_sequences)
+            # Use mixed precision if enabled
+            if USE_MIXED_PRECISION:
+                with torch.cuda.amp.autocast():
+                    logits = model(batch_sequences)
+            else:
+                logits = model(batch_sequences)
+            
             pred_classes = logits.argmax(dim=1).cpu().numpy()
             batch_indices = batch_indices.cpu().numpy()
             
@@ -157,7 +165,12 @@ if __name__ == "__main__":
     print("Warming up GPU...")
     dummy_input = torch.randn(BATCH_SIZE, SEQ_LEN, 10).to(device)
     with torch.no_grad():
-        _ = model(dummy_input)
+        try:
+            _ = model(dummy_input)
+            print("GPU warmup successful!")
+        except Exception as e:
+            print(f"GPU warmup failed: {e}")
+            print("Proceeding without warmup...")
     
     # Run optimized inference
     results = predict_batch_optimized(model, features, df, seq_len=SEQ_LEN, batch_size=BATCH_SIZE)

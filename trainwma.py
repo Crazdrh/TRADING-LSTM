@@ -202,8 +202,8 @@ def get_phase_config(phase_name):
     configs = {
         'initial': {
             'name': 'PHASE 1: INITIAL TRAINING',
-            'epochs': 50,
-            'lr': 0.001,
+            'epochs': 60,
+            'lr': 0.007,
             'batch_size': 2048,  # Increased from 1000
             'weight_decay': 1e-5,
             'grad_clip': 1.0,
@@ -214,7 +214,7 @@ def get_phase_config(phase_name):
         'deep': {
             'name': 'PHASE 2: DEEP LEARNING',
             'epochs': 120,
-            'lr': 0.0007,
+            'lr': 0.001,
             'batch_size': 2048,  # Increased from 1000
             'weight_decay': 2e-5,
             'grad_clip': 0.8,
@@ -225,7 +225,7 @@ def get_phase_config(phase_name):
         'fine_tune': {
             'name': 'PHASE 3: FINE-TUNING',
             'epochs': 180,
-            'lr': 0.0003,
+            'lr': 0.0007,
             'batch_size': 1536,  # Increased from 800
             'weight_decay': 3e-5,
             'grad_clip': 0.5,
@@ -236,7 +236,7 @@ def get_phase_config(phase_name):
         'final': {
             'name': 'PHASE 4: FINAL OPTIMIZATION',
             'epochs': 220,
-            'lr': 0.0001,
+            'lr': 0.0004,
             'batch_size': 1024,  # Increased from 600
             'weight_decay': 5e-5,
             'grad_clip': 0.3,

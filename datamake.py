@@ -3,9 +3,9 @@ import pandas as pd
 
 # === CONFIGURATION ===
 csv_dir = "C:/Users/Hayden/Downloads/5mincsvma/"  # <-- Change to your actual directory
-lookahead = 5
-buy_thresh = 0.0002      # 0.2%
-sell_thresh = -0.0002    # -0.2%
+lookahead = 15
+buy_thresh = 0.002      # 0.2%
+sell_thresh = -0.002    # -0.2%
 
 label_to_class = {
     "buy": 1,

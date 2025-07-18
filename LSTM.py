@@ -194,7 +194,7 @@ class ComplexLSTMModel(nn.Module):
             lstm_block = BiLSTMBlock(
                 input_size=hidden_dim,
                 hidden_size=hidden_dim,
-                num_layers=2,
+                num_layers=3,
                 dropout=dropout
             )
             self.lstm_blocks.append(lstm_block)
@@ -219,10 +219,10 @@ class ComplexLSTMModel(nn.Module):
         self.output_heads = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(hidden_dim * 3, hidden_dim),
-                nn.ReLU(),
+                nn.GELU(),
                 nn.Dropout(dropout),
                 nn.Linear(hidden_dim, hidden_dim // 2),
-                nn.ReLU(),
+                nn.GELU()
                 nn.Dropout(dropout * 0.5),
                 nn.Linear(hidden_dim // 2, output_dim)
             )
@@ -232,7 +232,7 @@ class ComplexLSTMModel(nn.Module):
         # Final ensemble combiner
         self.ensemble_combiner = nn.Sequential(
             nn.Linear(output_dim * 3, hidden_dim),
-            nn.ReLU(),
+            nn.GELU()
             nn.Dropout(dropout),
             nn.Linear(hidden_dim, output_dim)
         )
@@ -340,7 +340,7 @@ if __name__ == "__main__":
     model = ComplexLSTMModel(
         input_dim=9,
         hidden_dim=256,
-        num_lstm_layers=4,
+        num_lstm_layers=3,
         num_heads=8,
         output_dim=3,
         dropout=0.3

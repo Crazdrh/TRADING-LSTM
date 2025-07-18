@@ -118,7 +118,7 @@ class TemporalConvBlock(nn.Module):
                 nn.Conv1d(in_channels, current_out_channels, 
                          kernel_size, padding=kernel_size//2),
                 nn.BatchNorm1d(current_out_channels),
-                nn.ReLU(),
+                nn.GELU()
                 nn.Dropout(dropout)
             )
             self.convs.append(conv)
@@ -177,7 +177,7 @@ class ComplexLSTMModel(nn.Module):
         self.input_proj = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
+            nn.GELU()
             nn.Dropout(dropout * 0.5)
         )
         

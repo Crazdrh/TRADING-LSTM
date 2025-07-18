@@ -14,7 +14,7 @@ FEATURE_COLS = ['open', 'high', 'low', 'close','volume', 'ma_5', 'ma_10', 'ma_20
 
 # GPU Optimization Settings
 BATCH_SIZE = 2048  # Increase this based on your GPU memory
-NUM_WORKERS = 4    # For faster data loading
+NUM_WORKERS = 12    # For faster data loading
 PIN_MEMORY = True  # Faster CPU->GPU transfer
 USE_MIXED_PRECISION = True  # Set to True for 2x speedup (may reduce accuracy slightly)
 
@@ -60,7 +60,7 @@ def load_and_preprocess(csv_path):
 
 def create_sequences_vectorized(features, seq_len):
     """Create all sequences at once using vectorized operations"""
-    n_samples = len(features) - seq_len
+    n_samples = len(features) - seq_len + 1
     if n_samples <= 0:
         return np.array([]), np.array([])
     
@@ -69,7 +69,16 @@ def create_sequences_vectorized(features, seq_len):
         features, window_shape=(seq_len, features.shape[1])
     ).squeeze(axis=1)
     
+    # Make a copy to ensure it's writable and contiguous
+    sequences = sequences.copy()
+    
+    # Create corresponding indices (these are the row numbers we're predicting for)
     indices = np.arange(seq_len, len(features))
+    
+    # Ensure we have the right number of indices
+    if len(sequences) != len(indices):
+        indices = indices[:len(sequences)]
+    
     return sequences, indices
 
 def predict_batch_optimized(model, features, df, seq_len=SEQ_LEN, batch_size=BATCH_SIZE):
@@ -81,12 +90,14 @@ def predict_batch_optimized(model, features, df, seq_len=SEQ_LEN, batch_size=BAT
         return []
     
     print(f"Processing {len(sequences)} sequences in batches of {batch_size}")
+    print(f"Sequences shape: {sequences.shape}, Indices shape: {indices.shape}")
     
-    # Convert to tensors
+    # Convert to tensors - make sure indices are the right length
     sequences_tensor = torch.from_numpy(sequences).to(device, non_blocking=True)
+    indices_tensor = torch.from_numpy(indices).long()  # Ensure indices are long type
     
     # Create DataLoader for efficient batching
-    dataset = TensorDataset(sequences_tensor, torch.from_numpy(indices))
+    dataset = TensorDataset(sequences_tensor, indices_tensor)
     dataloader = DataLoader(
         dataset, 
         batch_size=batch_size, 
@@ -191,4 +202,5 @@ if __name__ == "__main__":
     # Memory cleanup
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+        print(f"\nFinal GPU Memory: {torch.cuda.memory_allocated()/1e9:.2f} GB")
         print(f"\nFinal GPU Memory: {torch.cuda.memory_allocated()/1e9:.2f} GB")

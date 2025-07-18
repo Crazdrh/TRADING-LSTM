@@ -118,3 +118,11 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         print(f"Peak GPU memory usage: {torch.cuda.max_memory_allocated()/1e9:.2f} GB")
         torch.cuda.empty_cache()
+    import pandas as pd
+
+    OUTPUT_CSV = "inference_results.csv"
+
+    df_out = pd.DataFrame(results, columns=["row_num", "date", "predicted", "actual"])
+    df_out.to_csv(OUTPUT_CSV, index=False)
+
+    print(f"\nSaved results to {OUTPUT_CSV}")

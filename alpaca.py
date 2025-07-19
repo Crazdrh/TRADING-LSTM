@@ -7,8 +7,8 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 
 # REPLACE with your real keys!
-API_KEY = "PKKTTJ8W5NNHC6IXHRL3"
-API_SECRET = "I4Ooz5lOco0fZtPJUhKqY6zoLIBA8knhuyVW6pga"
+API_KEY = ""
+API_SECRET = ""
 client = StockHistoricalDataClient(API_KEY, API_SECRET)
 
 symbol = "NVDA"

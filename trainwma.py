@@ -20,40 +20,25 @@ class PriceDataset(Dataset):
             # OHLCV
             'open', 'high', 'low', 'close', 'volume',
 
-            # Moving Averages
-            'ma_5', 'ma_10', 'ma_20', 'ma_40', 'ma_55',
+            'ma_10', 'ma_20', 'ma_30', 'ma_40', 'dist_from_ma_10', 'dist_from_ma_20',
 
-            # Volume Indicators
-            'vwap', 'obv', 'volume_roc', 'mfi', 'ad_line',
-            'relative_volume', 'cmf',
+            # Volume
+            'vwap', 'relative_volume', 'obv',
 
             # Volatility
-            'atr_14', 'atr_normalized', 'bb_upper', 'bb_lower',
-            'bb_middle', 'bb_width', 'bb_position', 'kc_position',
-            'volatility_20', 'volatility_50', 'donchian_position',
+            'bb_width', 'bb_position', 'atr_normalized',
 
             # Momentum
-            'rsi_14', 'rsi_9', 'stoch_k', 'stoch_d', 'macd',
-            'macd_signal', 'macd_diff', 'macd_diff_normalized',
-            'roc_5', 'roc_10', 'roc_20', 'cci', 'williams_r',
-            'ultimate_oscillator',
+            'rsi_14', 'macd_diff', 'stoch_k', 'roc_10',
 
             # Market Structure
-            'price_to_vwap', 'hl_spread', 'close_position',
-            'dist_from_ma_5', 'dist_from_ma_10', 'dist_from_ma_20',
-            'dist_from_ma_40', 'dist_from_ma_55', 'ma_alignment',
-            'pivot_position',
+            'price_to_vwap', 'hl_spread', 'pivot_position',
 
             # Time Features
-            'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos',
-            'is_premarket', 'is_regular', 'is_afterhours',
-            'is_open_30min', 'is_close_30min', 'mins_since_open',
+            'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'mins_since_open',
 
             # Engineered Features
-            'price_volume_corr', 'momentum_quality', 'efficiency_ratio',
-            'zscore_20', 'zscore_50', 'kyle_lambda', 'amihud_illiquidity',
-            'near_round_number', 'near_half_dollar', 'rsi_divergence',
-            'volume_spike', 'volume_dry_up'
+            'zscore_20', 'efficiency_ratio', 'price_volume_corr'
         ]
         # Clean column names
         df.columns = [c.strip() for c in df.columns]
@@ -301,9 +286,9 @@ def print_phase_header(phase_config):
 
 def main():
     parser = argparse.ArgumentParser(description='Enhanced LSTM Training with Multi-Phase Support')
-    parser.add_argument('--data-dir', type=str, default="/lambda/nfs/LSTM/Lstm/data/alpaca",
+    parser.add_argument('--data-dir', type=str, default="C:/Users/Hayden/Lambda/LSTM/Lstm/data/polygon/1/",
                         help='Directory containing CSV files')
-    parser.add_argument('--save-dir', type=str, default="/lambda/nfs/LSTM/Lstm/ckpt/2/",
+    parser.add_argument('--save-dir', type=str, default="C:/Users/Hayden/Lambda/LSTM/Lstm/ckpt/2/",
                         help='Directory to save models and checkpoints')
     parser.add_argument('--seq-len', type=int, default=50, help='Sequence length')
 
@@ -372,7 +357,7 @@ def main():
 
     # Model setup
     n_classes = int(df['signal_class'].dropna().nunique())
-    input_dim = 10  # Updated to include volume
+    input_dim = 32  # Updated to include volume
 
     model = ComplexLSTMModel(input_dim=input_dim, output_dim=n_classes)
     model = model.to(device).float()

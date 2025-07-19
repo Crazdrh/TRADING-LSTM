@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
@@ -66,7 +67,7 @@ class BiLSTMBlock(nn.Module):
             input_size, hidden_size, 
             num_layers=num_layers, 
             dropout=dropout if num_layers > 1 else 0,
-            bidirectional=False, 
+            bidirectional=True, 
             batch_first=True
         )
         
@@ -118,7 +119,7 @@ class TemporalConvBlock(nn.Module):
                 nn.Conv1d(in_channels, current_out_channels, 
                          kernel_size, padding=kernel_size//2),
                 nn.BatchNorm1d(current_out_channels),
-                nn.GELU()
+                nn.ReLU(),
                 nn.Dropout(dropout)
             )
             self.convs.append(conv)
@@ -177,7 +178,7 @@ class ComplexLSTMModel(nn.Module):
         self.input_proj = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
-            nn.GELU()
+            nn.ReLU(),
             nn.Dropout(dropout * 0.5)
         )
         
@@ -194,7 +195,7 @@ class ComplexLSTMModel(nn.Module):
             lstm_block = BiLSTMBlock(
                 input_size=hidden_dim,
                 hidden_size=hidden_dim,
-                num_layers=3,
+                num_layers=2,
                 dropout=dropout
             )
             self.lstm_blocks.append(lstm_block)
@@ -219,10 +220,10 @@ class ComplexLSTMModel(nn.Module):
         self.output_heads = nn.ModuleList([
             nn.Sequential(
                 nn.Linear(hidden_dim * 3, hidden_dim),
-                nn.GELU(),
+                nn.ReLU(),
                 nn.Dropout(dropout),
                 nn.Linear(hidden_dim, hidden_dim // 2),
-                nn.GELU()
+                nn.ReLU(),
                 nn.Dropout(dropout * 0.5),
                 nn.Linear(hidden_dim // 2, output_dim)
             )
@@ -232,7 +233,7 @@ class ComplexLSTMModel(nn.Module):
         # Final ensemble combiner
         self.ensemble_combiner = nn.Sequential(
             nn.Linear(output_dim * 3, hidden_dim),
-            nn.GELU()
+            nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_dim, output_dim)
         )
@@ -340,7 +341,7 @@ if __name__ == "__main__":
     model = ComplexLSTMModel(
         input_dim=9,
         hidden_dim=256,
-        num_lstm_layers=3,
+        num_lstm_layers=4,
         num_heads=8,
         output_dim=3,
         dropout=0.3

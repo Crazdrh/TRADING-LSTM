@@ -67,7 +67,7 @@ class BiLSTMBlock(nn.Module):
             input_size, hidden_size, 
             num_layers=num_layers, 
             dropout=dropout if num_layers > 1 else 0,
-            bidirectional=True, 
+            bidirectional=False, 
             batch_first=True
         )
         

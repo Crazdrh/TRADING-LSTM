@@ -225,7 +225,7 @@ def get_phase_config(phase_name):
         'initial': {
             'name': 'PHASE 1: INITIAL TRAINING',
             'epochs': 70,
-            'lr': 0.007,
+            'lr': 0.003,
             'batch_size': 2048,  # Increased from 1000
             'weight_decay': 1e-5,
             'grad_clip': 1.0,
@@ -286,9 +286,9 @@ def print_phase_header(phase_config):
 
 def main():
     parser = argparse.ArgumentParser(description='Enhanced LSTM Training with Multi-Phase Support')
-    parser.add_argument('--data-dir', type=str, default="C:/Users/Hayden/Lambda/LSTM/Lstm/data/polygon/1/",
+    parser.add_argument('--data-dir', type=str, default="/lambda/nfs/LSTMgh2000/Lstm/TRADING-LSTM/Stuff/data/alpaca/Labled_data/",
                         help='Directory containing CSV files')
-    parser.add_argument('--save-dir', type=str, default="C:/Users/Hayden/Lambda/LSTM/Lstm/ckpt/2/",
+    parser.add_argument('--save-dir', type=str, default="/lambda/nfs/LSTMgh2000/Lstm/TRADING-LSTM/Stuff/ckpt/2/",
                         help='Directory to save models and checkpoints')
     parser.add_argument('--seq-len', type=int, default=50, help='Sequence length')
 

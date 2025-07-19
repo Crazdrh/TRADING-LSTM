@@ -72,7 +72,7 @@ class BiLSTMBlock(nn.Module):
         )
         
         # Project bidirectional output back to hidden_size
-        self.output_proj = nn.Linear(hidden_size * 2, hidden_size)
+        self.output_proj = nn.Linear(hidden_size, hidden_size)
         
         # Layer normalization and dropout
         self.layer_norm = nn.LayerNorm(hidden_size)

@@ -4,69 +4,68 @@ import time
 
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
-from alpaca.data.timeframe import TimeFrame
+from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 
-# REPLACE with your real keys!
 API_KEY = ""
 API_SECRET = ""
 client = StockHistoricalDataClient(API_KEY, API_SECRET)
 
-symbol = "NVDA"
-start_date = date(2021, 7, 15)   # Change this! Alpaca only supports recent years for minute data
-end_date   = date(2024, 7, 15)
-bars = []
+SYMBOLS = ["AAPL", "GOOGL", "NVDA"]  # <-- Edit this list for your stocks
+start_date = date(2020, 7, 18)
+end_date   = date(2025, 6, 18)
+chunk_days = 15  # 15 days at a time
 
-# Alpaca's API limit: 1000 bars per request for minute timeframe
-# At 390 bars per trading day, ~2-3 trading days per chunk
-chunk_days = 1
+save_dir = r"C:/Users/Hayden/Lambda/LSTM/Lstm/data/alpaca/"
 
-while start_date < end_date:
-    window_end = min(start_date + timedelta(days=chunk_days-1), end_date)
-    print(f"Fetching {start_date} to {window_end}")
-    try:
-        request_params = StockBarsRequest(
-            symbol_or_symbols=[symbol],
-            timeframe=TimeFrame.Minute,
-            start=datetime.combine(start_date, datetime.min.time()),
-            end=datetime.combine(window_end, datetime.max.time()),
-            adjustment=None,
-            feed=None,
-            limit=1000
-        )
-        response = client.get_stock_bars(request_params)
-        df = response.df
-        if df.empty:
-            print("No data returned for this range.")
-        else:
-            # Filter to just our symbol
-            df = df[df.index.get_level_values("symbol") == symbol]
-            bars.append(df)
-    except Exception as e:
-        print(f"Error: {e}")
-        print("Sleeping for 60 seconds due to possible rate limit...")
-        time.sleep(60)
+for symbol in SYMBOLS:
+    print(f"\n=== Downloading: {symbol} ===")
+    bars = []
+    cur_start = start_date
+    while cur_start < end_date:
+        window_end = min(cur_start + timedelta(days=chunk_days-1), end_date)
+        print(f"Fetching {symbol} {cur_start} to {window_end}")
+        try:
+            request_params = StockBarsRequest(
+                symbol_or_symbols=[symbol],
+                timeframe=TimeFrame(15, TimeFrameUnit.Minute),
+                start=datetime.combine(cur_start, datetime.min.time()),
+                end=datetime.combine(window_end, datetime.max.time()),
+                adjustment=None,
+                feed=None,
+                limit=1000
+            )
+            response = client.get_stock_bars(request_params)
+            df = response.df
+            if df.empty:
+                print("No data returned for this range.")
+            else:
+                df = df[df.index.get_level_values("symbol") == symbol]
+                bars.append(df)
+        except Exception as e:
+            print(f"Error: {e}")
+            print("Sleeping for 60 seconds due to possible rate limit...")
+            time.sleep(60)
+            continue
+        cur_start = window_end + timedelta(days=1)
+        time.sleep(1.5)  # Rate limiting
+
+    if not bars:
+        print(f"No data downloaded for {symbol} in your range! Skipping.")
         continue
-    start_date = window_end + timedelta(days=1)
-    time.sleep(1.5)  # Respect API limits
 
-if not bars:
-    print("No data downloaded for your range! Try more recent dates.")
-    exit(1)
+    full_df = pd.concat(bars).reset_index()
+    mask = (
+        full_df[["open", "high", "low", "close"]].notnull().any(axis=1) &
+        (full_df["volume"] > 0)
+    )
+    filtered_df = full_df[mask]
+    if filtered_df.empty:
+        print(f"No valid bars after cleaning for {symbol}. Skipping.")
+        continue
 
-full_df = pd.concat(bars)
-full_df = full_df.reset_index()
+    download_path = f"{save_dir}{symbol}_15min.csv"
+    filtered_df.to_csv(download_path, index=False)
+    print(f"Data for {symbol} saved to {download_path}")
 
-# Drop rows with all OHLCV missing or 0 volume
-mask = (
-    full_df[["open", "high", "low", "close"]].notnull().any(axis=1) &
-    (full_df["volume"] > 0)
-)
-filtered_df = full_df[mask]
+print("\nDone downloading all symbols.")
 
-if filtered_df.empty:
-    print("No valid bars after cleaning. Likely your date range is too old.")
-    exit(1)
-# Save to CSV
-download_path = r"C:/Users/hayden/LSTM/alpaca/nvda_5min.csv"
-filtered_df.to_csv(download_path, index=False)
-print(f"Data saved to {download_path}")

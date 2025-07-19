@@ -310,7 +310,7 @@ def main():
 
     parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--train-split', type=float, default=0.85, help='Training split ratio')
+    parser.add_argument('--train-split', type=float, default=0.8, help='Training split ratio')
 
     args = parser.parse_args()
 
@@ -377,7 +377,7 @@ def main():
         print("\n" + "=" * 60)
         print("STARTING MULTI-PHASE TRAINING")
         print("=" * 60)
-        print("Estimated Total Time: 2-4 hours")
+        print("Estimated Total Time: 11-22 hours")
         print("=" * 60)
 
         phases = ['initial', 'deep', 'fine_tune', 'final']
@@ -464,14 +464,14 @@ def run_training_phase(model, dataset, train_dataset, val_dataset, loss_fn, devi
         train_dataset,
         batch_size=phase_config['batch_size'],
         shuffle=True,
-        num_workers=8,
+        num_workers=2,
         pin_memory=True
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=phase_config['batch_size'],
         shuffle=False,
-        num_workers=4,
+        num_workers=2,
         pin_memory=True
     )
 

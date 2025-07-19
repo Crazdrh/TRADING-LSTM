@@ -16,8 +16,45 @@ from LSTM import ComplexLSTMModel
 class PriceDataset(Dataset):
     def __init__(self, df, seq_len=50):
         # Include volume in feature columns
-        feature_cols = ['open', 'high', 'low', 'close', 'volume', 'ma_5', 'ma_10', 'ma_20', 'ma_40', 'ma_55']
+        feature_cols = [
+            # OHLCV
+            'open', 'high', 'low', 'close', 'volume',
 
+            # Moving Averages
+            'ma_5', 'ma_10', 'ma_20', 'ma_40', 'ma_55',
+
+            # Volume Indicators
+            'vwap', 'obv', 'volume_roc', 'mfi', 'ad_line',
+            'relative_volume', 'cmf',
+
+            # Volatility
+            'atr_14', 'atr_normalized', 'bb_upper', 'bb_lower',
+            'bb_middle', 'bb_width', 'bb_position', 'kc_position',
+            'volatility_20', 'volatility_50', 'donchian_position',
+
+            # Momentum
+            'rsi_14', 'rsi_9', 'stoch_k', 'stoch_d', 'macd',
+            'macd_signal', 'macd_diff', 'macd_diff_normalized',
+            'roc_5', 'roc_10', 'roc_20', 'cci', 'williams_r',
+            'ultimate_oscillator',
+
+            # Market Structure
+            'price_to_vwap', 'hl_spread', 'close_position',
+            'dist_from_ma_5', 'dist_from_ma_10', 'dist_from_ma_20',
+            'dist_from_ma_40', 'dist_from_ma_55', 'ma_alignment',
+            'pivot_position',
+
+            # Time Features
+            'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos',
+            'is_premarket', 'is_regular', 'is_afterhours',
+            'is_open_30min', 'is_close_30min', 'mins_since_open',
+
+            # Engineered Features
+            'price_volume_corr', 'momentum_quality', 'efficiency_ratio',
+            'zscore_20', 'zscore_50', 'kyle_lambda', 'amihud_illiquidity',
+            'near_round_number', 'near_half_dollar', 'rsi_divergence',
+            'volume_spike', 'volume_dry_up'
+        ]
         # Clean column names
         df.columns = [c.strip() for c in df.columns]
 
@@ -250,16 +287,16 @@ def get_phase_config(phase_name):
 
 def print_phase_header(phase_config):
     """Print phase information header"""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"{phase_config['name']}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Description: {phase_config['description']}")
     print(f"Target Epochs: {phase_config['epochs']}")
     print(f"Learning Rate: {phase_config['lr']} (FIXED - will not be reduced)")
     print(f"Batch Size: {phase_config['batch_size']}")
     print(f"Weight Decay: {phase_config['weight_decay']}")
     print(f"Gradient Clip: {phase_config['grad_clip']}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 def main():
@@ -269,26 +306,27 @@ def main():
     parser.add_argument('--save-dir', type=str, default="/lambda/nfs/LSTM/Lstm/ckpt/2/",
                         help='Directory to save models and checkpoints')
     parser.add_argument('--seq-len', type=int, default=50, help='Sequence length')
-    
+
     # Training phase arguments
-    parser.add_argument('--phase', type=str, choices=['initial', 'deep', 'fine_tune', 'final', 'custom'], 
+    parser.add_argument('--phase', type=str, choices=['initial', 'deep', 'fine_tune', 'final', 'custom'],
                         default='custom', help='Training phase to use')
-    parser.add_argument('--multi-phase', action='store_true', 
+    parser.add_argument('--multi-phase', action='store_true',
                         help='Run all phases sequentially (overrides --phase)')
-    
+
     # Custom hyperparameters (used when phase='custom' or overriding phase defaults)
     parser.add_argument('--batch-size', type=int, default=None, help='Batch size (overrides phase default)')
     parser.add_argument('--epochs', type=int, default=50, help='Number of epochs (overrides phase default)')
     parser.add_argument('--lr', type=float, default=None, help='Learning rate (overrides phase default)')
     parser.add_argument('--weight-decay', type=float, default=None, help='Weight decay (overrides phase default)')
-    parser.add_argument('--grad-clip', type=float, default=None, help='Gradient clipping norm (overrides phase default)')
+    parser.add_argument('--grad-clip', type=float, default=None,
+                        help='Gradient clipping norm (overrides phase default)')
     parser.add_argument('--ckpt-freq', type=int, default=None, help='Checkpoint frequency (overrides phase default)')
     parser.add_argument('--eval-freq', type=int, default=None, help='Evaluation frequency (overrides phase default)')
-    
+
     parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--train-split', type=float, default=0.8, help='Training split ratio')
-    
+
     args = parser.parse_args()
 
     # Set random seed
@@ -351,43 +389,43 @@ def main():
 
     # Multi-phase training
     if args.multi_phase:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("STARTING MULTI-PHASE TRAINING")
-        print("="*60)
+        print("=" * 60)
         print("Estimated Total Time: 11-22 hours")
-        print("="*60)
-        
+        print("=" * 60)
+
         phases = ['initial', 'deep', 'fine_tune', 'final']
         total_start_time = time.time()
-        
+
         for i, phase_name in enumerate(phases):
             phase_config = get_phase_config(phase_name)
             print_phase_header(phase_config)
-            
+
             # Run training for this phase
             success = run_training_phase(
-                model, dataset, train_dataset, val_dataset, loss_fn, device, 
+                model, dataset, train_dataset, val_dataset, loss_fn, device,
                 n_classes, phase_config, save_dir, checkpoint_path, args
             )
-            
+
             if not success:
                 print(f"\nTraining failed at {phase_config['name']}")
                 return False
-            
+
             print(f"\n{phase_config['name']} completed successfully")
-            
+
             # Brief pause between phases
             if i < len(phases) - 1:
                 print("Pausing for 30 seconds before next phase...")
                 time.sleep(30)
-        
+
         total_time = time.time() - total_start_time
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("COMPLETE MULTI-PHASE TRAINING FINISHED!")
-        print(f"Total training time: {total_time/3600:.1f} hours")
+        print(f"Total training time: {total_time / 3600:.1f} hours")
         print(f"Final models saved to: {save_dir}")
-        print(f"{'='*60}")
-        
+        print(f"{'=' * 60}")
+
     else:
         # Single phase training
         if args.phase != 'custom':
@@ -406,7 +444,7 @@ def main():
                 'description': 'Custom training configuration'
             }
             print_phase_header(phase_config)
-        
+
         # Override with command line arguments if provided
         if args.batch_size is not None:
             phase_config['batch_size'] = args.batch_size
@@ -420,45 +458,45 @@ def main():
             phase_config['ckpt_freq'] = args.ckpt_freq
         if args.eval_freq is not None:
             phase_config['eval_freq'] = args.eval_freq
-        
+
         success = run_training_phase(
-            model, dataset, train_dataset, val_dataset, loss_fn, device, 
+            model, dataset, train_dataset, val_dataset, loss_fn, device,
             n_classes, phase_config, save_dir, checkpoint_path, args
         )
-        
+
         if success:
             print("\nTraining completed successfully!")
         else:
             print("\nTraining failed!")
 
 
-def run_training_phase(model, dataset, train_dataset, val_dataset, loss_fn, device, 
-                      n_classes, phase_config, save_dir, checkpoint_path, args):
+def run_training_phase(model, dataset, train_dataset, val_dataset, loss_fn, device,
+                       n_classes, phase_config, save_dir, checkpoint_path, args):
     """Run a single training phase"""
-    
+
     # Create data loaders with phase-specific batch size
     train_loader = DataLoader(
-        train_dataset, 
-        batch_size=phase_config['batch_size'], 
-        shuffle=True, 
-        num_workers=2, 
+        train_dataset,
+        batch_size=phase_config['batch_size'],
+        shuffle=True,
+        num_workers=2,
         pin_memory=True
     )
     val_loader = DataLoader(
-        val_dataset, 
-        batch_size=phase_config['batch_size'], 
-        shuffle=False, 
-        num_workers=2, 
+        val_dataset,
+        batch_size=phase_config['batch_size'],
+        shuffle=False,
+        num_workers=2,
         pin_memory=True
     )
 
     # Optimizer with phase-specific parameters - NO SCHEDULER
     optimizer = torch.optim.Adam(
-        model.parameters(), 
-        lr=phase_config['lr'], 
+        model.parameters(),
+        lr=phase_config['lr'],
         weight_decay=phase_config['weight_decay']
     )
-    
+
     # Remove the scheduler to maintain constant learning rate
     scheduler = None
 
@@ -530,7 +568,8 @@ def run_training_phase(model, dataset, train_dataset, val_dataset, loss_fn, devi
             # Progress logging
             if step % 50 == 0:
                 current_lr = optimizer.param_groups[0]['lr']
-                print(f"Epoch {epoch + 1}/{phase_config['epochs']}, Step {step + 1}/{len(train_loader)}, Loss: {loss.item():.5f}, LR: {current_lr:.6f}")
+                print(
+                    f"Epoch {epoch + 1}/{phase_config['epochs']}, Step {step + 1}/{len(train_loader)}, Loss: {loss.item():.5f}, LR: {current_lr:.6f}")
 
         # Calculate training metrics
         train_loss = total_loss / num_batches

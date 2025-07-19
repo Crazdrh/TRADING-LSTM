@@ -68,7 +68,30 @@ class PriceDataset(Dataset):
     """Enhanced dataset with better error handling and validation"""
     def __init__(self, df: pd.DataFrame, seq_len: int = 50, feature_cols: Optional[list] = None):
         if feature_cols is None:
-            feature_cols = ['open', 'high', 'low', 'close', 'MA', 'MA.1', 'MA.2', 'MA.3', 'MA.4']
+            feature_cols = [
+            # OHLCV
+            'open', 'high', 'low', 'close', 'volume',
+
+            'ma_10', 'ma_20', 'ma_30', 'ma_40', 'dist_from_ma_10', 'dist_from_ma_20',
+
+            # Volume
+            'vwap', 'relative_volume', 'obv',
+
+            # Volatility
+            'bb_width', 'bb_position', 'atr_normalized',
+
+            # Momentum
+            'rsi_14', 'macd_diff', 'stoch_k', 'roc_10',
+
+            # Market Structure
+            'price_to_vwap', 'hl_spread', 'pivot_position',
+
+            # Time Features
+            'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'mins_since_open',
+
+            # Engineered Features
+            'zscore_20', 'efficiency_ratio', 'price_volume_corr'
+        ]
         
         # Clean column names
         df.columns = [c.strip() for c in df.columns]

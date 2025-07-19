@@ -11,3 +11,4 @@ polygon
 alpaca-trade-api
 polygon-api-client
 wandb
+ta                    

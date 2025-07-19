@@ -57,7 +57,7 @@ class MultiHeadAttention(nn.Module):
 
 class BiLSTMBlock(nn.Module):
     """Bidirectional LSTM block with residual connections and attention"""
-    def __init__(self, input_size, hidden_size, num_layers=2, dropout=0.2):
+    def __init__(self, input_size, hidden_size, num_layers=3, dropout=0.2):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers

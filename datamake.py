@@ -3,7 +3,7 @@ import pandas as pd
 
 # === CONFIGURATION ===
 csv_dir = "C:/Users/Hayden/Downloads/5mincsvma/"  # <-- Change to your actual directory
-lookahead = 12
+lookahead = 20
 buy_thresh = 0.002      # 0.2%
 sell_thresh = -0.002    # -0.2%
 

@@ -34,9 +34,6 @@ class PriceDataset(Dataset):
             # Market Structure
             'price_to_vwap', 'hl_spread', 'pivot_position',
 
-            # Time Features
-            'hour_sin', 'hour_cos', 'dow_sin', 'dow_cos', 'mins_since_open',
-
             # Engineered Features
             'zscore_20', 'efficiency_ratio', 'price_volume_corr'
         ]
@@ -226,7 +223,7 @@ def get_phase_config(phase_name):
             'name': 'PHASE 1: INITIAL TRAINING',
             'epochs': 70,
             'lr': 0.003,
-            'batch_size': 2048,  # Increased from 1000
+            'batch_size': 1500,  # Increased from 1000
             'weight_decay': 1e-5,
             'grad_clip': 1.0,
             'ckpt_freq': 10,
@@ -237,7 +234,7 @@ def get_phase_config(phase_name):
             'name': 'PHASE 2: DEEP LEARNING',
             'epochs': 130,
             'lr': 0.001,
-            'batch_size': 2048,  # Increased from 1000
+            'batch_size': 1250,  # Increased from 1000
             'weight_decay': 2e-5,
             'grad_clip': 0.8,
             'ckpt_freq': 8,
@@ -248,7 +245,7 @@ def get_phase_config(phase_name):
             'name': 'PHASE 3: FINE-TUNING',
             'epochs': 190,
             'lr': 0.0007,
-            'batch_size': 1536,  # Increased from 800
+            'batch_size': 1024,  # Increased from 800
             'weight_decay': 3e-5,
             'grad_clip': 0.5,
             'ckpt_freq': 5,
@@ -286,9 +283,9 @@ def print_phase_header(phase_config):
 
 def main():
     parser = argparse.ArgumentParser(description='Enhanced LSTM Training with Multi-Phase Support')
-    parser.add_argument('--data-dir', type=str, default="/lambda/nfs/LSTMgh2000/Lstm/TRADING-LSTM/Stuff/data/alpaca/Labled_data/",
+    parser.add_argument('--data-dir', type=str, default="/lambda/nfs/LSTM/Lstm/data/alpaca/done/done",
                         help='Directory containing CSV files')
-    parser.add_argument('--save-dir', type=str, default="/lambda/nfs/LSTMgh2000/Lstm/TRADING-LSTM/Stuff/ckpt/2/",
+    parser.add_argument('--save-dir', type=str, default="/lambda/nfs/LSTM/Lstm/ckpt/2/",
                         help='Directory to save models and checkpoints')
     parser.add_argument('--seq-len', type=int, default=50, help='Sequence length')
 
@@ -357,7 +354,7 @@ def main():
 
     # Model setup
     n_classes = int(df['signal_class'].dropna().nunique())
-    input_dim = 32  # Updated to include volume
+    input_dim = 27  # Updated to include volume
 
     model = ComplexLSTMModel(input_dim=input_dim, output_dim=n_classes)
     model = model.to(device).float()
@@ -464,14 +461,14 @@ def run_training_phase(model, dataset, train_dataset, val_dataset, loss_fn, devi
         train_dataset,
         batch_size=phase_config['batch_size'],
         shuffle=True,
-        num_workers=2,
+        num_workers=20,
         pin_memory=True
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=phase_config['batch_size'],
         shuffle=False,
-        num_workers=2,
+        num_workers=8,
         pin_memory=True
     )
 

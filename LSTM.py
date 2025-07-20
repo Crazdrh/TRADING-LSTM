@@ -167,8 +167,8 @@ class ComplexLSTMModel(nn.Module):
     - Feature fusion and gating mechanisms
     - Ensemble-like output heads
     """
-    def __init__(self, input_dim=32, hidden_dim=256, num_lstm_layers=3, 
-                 num_heads=8, output_dim=3, dropout=0.3):
+    def __init__(self, input_dim=27, hidden_dim=256, num_lstm_layers=3, 
+                 num_heads=8, output_dim=2, dropout=0.3):
         super().__init__()
         
         self.hidden_dim = hidden_dim
@@ -339,11 +339,11 @@ class ComplexLSTMModel(nn.Module):
 if __name__ == "__main__":
     # Create model
     model = ComplexLSTMModel(
-        input_dim=9,
+        input_dim=27,
         hidden_dim=256,
-        num_lstm_layers=4,
+        num_lstm_layers=3,
         num_heads=8,
-        output_dim=3,
+        output_dim=2,
         dropout=0.3
     )
     

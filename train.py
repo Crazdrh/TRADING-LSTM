@@ -13,6 +13,7 @@ import time
 import argparse
 from sklearn.metrics import classification_report, confusion_matrix
 import random
+import json
 from LSTM import ComplexLSTMModel
 
 
@@ -205,6 +206,47 @@ def mixup_criterion(criterion, pred, y_a, y_b, lam):
     return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
 
 
+def save_checkpoint(model, optimizer, scheduler, epoch, step, loss, save_path, metrics=None):
+    """Save training checkpoint, replacing any existing checkpoint"""
+    checkpoint = {
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
+        'epoch': epoch,
+        'step': step,
+        'loss': loss,
+        'metrics': metrics or {}
+    }
+
+    # Create a temporary file first, then rename to avoid corruption
+    temp_path = str(save_path) + '.tmp'
+    torch.save(checkpoint, temp_path)
+
+    # Rename temp file to final path (atomic operation on most filesystems)
+    os.rename(temp_path, save_path)
+
+    print(f"Checkpoint saved to {save_path}")
+
+
+def load_checkpoint(model, optimizer, scheduler, checkpoint_path, device):
+    """Load training checkpoint"""
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    if scheduler and checkpoint.get('scheduler_state_dict'):
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
+    epoch = checkpoint.get('epoch', 0)
+    step = checkpoint.get('step', 0)
+    loss = checkpoint.get('loss', float('inf'))
+    metrics = checkpoint.get('metrics', {})
+
+    print(f"Loaded checkpoint: epoch={epoch}, step={step}, loss={loss:.5f}")
+    return epoch, step, loss, metrics
+
+
 def evaluate_model(model, loader, loss_fn, device, n_classes):
     """Evaluate model and return detailed metrics"""
     model.eval()
@@ -240,17 +282,83 @@ def evaluate_model(model, loader, loss_fn, device, n_classes):
             cls_acc = (all_preds[mask] == all_targets[mask]).mean()
             class_accuracies[cls] = cls_acc
     
-    # Confusion matrix
-    cm = confusion_matrix(all_targets, all_preds)
+    # Prediction distribution
+    unique_preds, pred_counts = np.unique(all_preds, return_counts=True)
+    pred_distribution = dict(zip(unique_preds, pred_counts))
     
     return {
         'loss': avg_loss,
         'accuracy': accuracy,
         'class_accuracies': class_accuracies,
-        'confusion_matrix': cm,
+        'pred_distribution': pred_distribution,
         'predictions': all_preds,
         'targets': all_targets
     }
+
+
+def get_phase_config(phase_name):
+    """Get configuration for each training phase"""
+    configs = {
+        'initial': {
+            'name': 'PHASE 1: INITIAL TRAINING',
+            'epochs': 70,
+            'lr': 0.003,
+            'batch_size': 1500,
+            'weight_decay': 1e-5,
+            'grad_clip': 1.0,
+            'ckpt_freq': 10,
+            'eval_freq': 5,
+            'description': 'Establish basic patterns with higher learning rate'
+        },
+        'deep': {
+            'name': 'PHASE 2: DEEP LEARNING',
+            'epochs': 130,
+            'lr': 0.0009,
+            'batch_size': 1250,
+            'weight_decay': 2e-5,
+            'grad_clip': 0.8,
+            'ckpt_freq': 8,
+            'eval_freq': 3,
+            'description': 'Deeper learning with reduced learning rate'
+        },
+        'fine_tune': {
+            'name': 'PHASE 3: FINE-TUNING',
+            'epochs': 190,
+            'lr': 0.0006,
+            'batch_size': 1024,
+            'weight_decay': 3e-5,
+            'grad_clip': 0.5,
+            'ckpt_freq': 5,
+            'eval_freq': 2,
+            'description': 'Fine-tuning with lower learning rate'
+        },
+        'final': {
+            'name': 'PHASE 4: FINAL OPTIMIZATION',
+            'epochs': 230,
+            'lr': 0.0003,
+            'batch_size': 800,
+            'weight_decay': 5e-5,
+            'grad_clip': 0.3,
+            'ckpt_freq': 3,
+            'eval_freq': 1,
+            'description': 'Final optimization with very low learning rate'
+        }
+    }
+    return configs.get(phase_name, None)
+
+
+def print_phase_header(phase_config):
+    """Print phase information header"""
+    print(f"\n{'=' * 60}")
+    print(f"{phase_config['name']}")
+    print(f"{'=' * 60}")
+    print(f"Description: {phase_config['description']}")
+    print(f"Target Epochs: {phase_config['epochs']}")
+    print(f"Learning Rate: {phase_config['lr']}")
+    print(f"Batch Size: {phase_config['batch_size']}")
+    print(f"Weight Decay: {phase_config['weight_decay']}")
+    print(f"Gradient Clip: {phase_config['grad_clip']}")
+    print(f"{'=' * 60}")
 
 
 def run_training_phase(model, dataset, train_indices, val_indices, loss_fn, device,
@@ -270,16 +378,16 @@ def run_training_phase(model, dataset, train_indices, val_indices, loss_fn, devi
         train_dataset,
         batch_size=phase_config['batch_size'],
         shuffle=True,
-        num_workers=8,
+        num_workers=20,
         pin_memory=True,
-        drop_last=True  # Drop last incomplete batch
+        drop_last=True
     )
     
     val_loader = DataLoader(
         val_dataset,
         batch_size=phase_config['batch_size'],
         shuffle=False,
-        num_workers=4,
+        num_workers=8,
         pin_memory=True
     )
     
@@ -295,40 +403,41 @@ def run_training_phase(model, dataset, train_indices, val_indices, loss_fn, devi
     # Learning rate scheduler with warm restarts
     scheduler = CosineAnnealingWarmRestarts(
         optimizer,
-        T_0=10,  # Restart every 10 epochs
-        T_mult=2,  # Double the period after each restart
+        T_0=10,
+        T_mult=2,
         eta_min=phase_config['lr'] * 0.01
     )
     
-    # Early stopping parameters
-    patience = 1000
-    patience_counter = 0
+    # Resume from checkpoint if specified or exists
+    start_epoch = 0
     best_val_loss = float('inf')
-    best_val_acc = 0
+    
+    if args.resume:
+        start_epoch, _, best_val_loss, _ = load_checkpoint(
+            model, optimizer, scheduler, args.resume, device
+        )
+    elif checkpoint_path.exists():
+        # Auto-resume from existing checkpoint
+        print(f"Found existing checkpoint at {checkpoint_path}, resuming...")
+        start_epoch, _, best_val_loss, _ = load_checkpoint(
+            model, optimizer, scheduler, checkpoint_path, device
+        )
     
     # Training history
-    training_history = {
-        'train_loss': [],
-        'train_acc': [],
-        'val_loss': [],
-        'val_acc': []
-    }
+    training_history = {'train_loss': [], 'val_loss': [], 'val_accuracy': []}
     
     # Mixed precision training
     scaler = GradScaler()
     
-    # Label smoothing
-    label_smoothing = 0.1
-    
     print(f"Starting training with learning rate: {phase_config['lr']}")
-    print(f"Train samples: {len(train_dataset)}, Val samples: {len(val_dataset)}")
     
-    for epoch in range(phase_config['epochs']):
+    for epoch in range(start_epoch, phase_config['epochs']):
         # Training phase
         model.train()
         total_loss = 0.0
-        correct = 0
-        total = 0
+        num_batches = 0
+        all_preds = []
+        all_targets = []
         
         start_time = time.time()
         
@@ -358,6 +467,8 @@ def run_training_phase(model, dataset, train_indices, val_indices, loss_fn, devi
             # Check for NaN loss
             if torch.isnan(loss):
                 print(f"NaN loss detected at epoch {epoch}, step {step}")
+                print(f"Batch X stats: min={batch_x.min()}, max={batch_x.max()}")
+                print(f"Batch Y unique values: {batch_y.unique()}")
                 return False
             
             scaler.scale(loss).backward()
@@ -370,133 +481,109 @@ def run_training_phase(model, dataset, train_indices, val_indices, loss_fn, devi
             scaler.update()
             
             total_loss += loss.item()
+            num_batches += 1
             
-            # Calculate accuracy
+            # Collect predictions
             with torch.no_grad():
-                _, predicted = logits.max(1)
-                total += batch_y.size(0)
-                correct += predicted.eq(batch_y).sum().item()
+                preds = torch.argmax(logits, dim=1)
+                all_preds.extend(preds.cpu().numpy())
+                all_targets.extend(batch_y.cpu().numpy())
             
             # Progress logging
-            if step % 50 == 0 and step > 0:
+            if step % 50 == 0:
                 current_lr = optimizer.param_groups[0]['lr']
-                print(f"Epoch {epoch+1}/{phase_config['epochs']}, "
-                      f"Step {step}/{len(train_loader)}, "
-                      f"Loss: {loss.item():.5f}, "
-                      f"LR: {current_lr:.6f}")
+                print(f"Epoch {epoch + 1}/{phase_config['epochs']}, Step {step + 1}/{len(train_loader)}, Loss: {loss.item():.5f}, LR: {current_lr:.6f}")
         
-        # Calculate epoch metrics
-        train_loss = total_loss / len(train_loader)
-        train_acc = 100. * correct / total
+        # Calculate training metrics
+        train_loss = total_loss / num_batches
+        train_accuracy = (np.array(all_preds) == np.array(all_targets)).mean()
         epoch_time = time.time() - start_time
         
+        print(f"Epoch {epoch + 1}/{phase_config['epochs']} completed in {epoch_time:.2f}s")
+        print(f"Train Loss: {train_loss:.5f}, Train Accuracy: {train_accuracy:.4f}")
+        
         # Validation phase
-        val_metrics = evaluate_model(model, val_loader, loss_fn, device, n_classes)
-        val_loss = val_metrics['loss']
-        val_acc = val_metrics['accuracy'] * 100
-        
-        # Update learning rate
-        #scheduler.step()
-        
-        # Log epoch results
-        print(f"\nEpoch {epoch+1}/{phase_config['epochs']} completed in {epoch_time:.2f}s")
-        print(f"Train Loss: {train_loss:.5f}, Train Acc: {train_acc:.2f}%")
-        print(f"Val Loss: {val_loss:.5f}, Val Acc: {val_acc:.2f}%")
-        
-        # Check for overfitting
-        overfit_gap = train_acc - val_acc
-        if overfit_gap > 15:
-            print(f"WARNING: Overfitting detected! Gap: {overfit_gap:.2f}%")
+        if (epoch + 1) % phase_config['eval_freq'] == 0:
+            print("Running validation...")
+            val_metrics = evaluate_model(model, val_loader, loss_fn, device, n_classes)
             
-            # Apply additional dropout dynamically
-            if hasattr(model, 'dropout'):
-                for module in model.modules():
-                    if isinstance(module, nn.Dropout):
-                        module.p = min(module.p + 0.05, 0.7)
-        
-        # Save training history
-        training_history['train_loss'].append(train_loss)
-        training_history['train_acc'].append(train_acc)
-        training_history['val_loss'].append(val_loss)
-        training_history['val_acc'].append(val_acc)
-        
-        # Early stopping check
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_val_acc = val_acc
-            patience_counter = 0
+            print(f"Validation Loss: {val_metrics['loss']:.5f}, Accuracy: {val_metrics['accuracy']:.4f}")
+            
+            # Per-class validation accuracy
+            for cls, acc in val_metrics['class_accuracies'].items():
+                samples_count = (val_metrics['targets'] == cls).sum()
+                print(f"  Class {cls} accuracy: {acc:.4f} ({samples_count} samples)")
             
             # Save best model
-            best_model_path = save_dir / "best_model.pth"
-            torch.save({
-                'model_state_dict': model.state_dict(),
-                'epoch': epoch,
-                'val_loss': val_loss,
-                'val_acc': val_acc,
-                'optimizer_state_dict': optimizer.state_dict(),
-                'training_history': training_history
-            }, best_model_path)
-            print(f"New best model saved! Val Loss: {val_loss:.5f}, Val Acc: {val_acc:.2f}%")
+            if val_metrics['loss'] < best_val_loss:
+                best_val_loss = val_metrics['loss']
+                best_model_path = save_dir / "best_model.pth"
+                torch.save(model.state_dict(), best_model_path)
+                print(f"New best model saved: {best_model_path}")
             
-        else:
-            patience_counter += 1
-            if patience_counter >= patience:
-                print(f"\nEarly stopping triggered at epoch {epoch+1}")
-                print(f"Best Val Loss: {best_val_loss:.5f}, Best Val Acc: {best_val_acc:.2f}%")
-                break
+            # Update training history
+            training_history['val_loss'].append(val_metrics['loss'])
+            training_history['val_accuracy'].append(val_metrics['accuracy'])
         
-        # Save checkpoint periodically
+        training_history['train_loss'].append(train_loss)
+        
+        # Update learning rate
+        scheduler.step()
+        
+        # Save checkpoint
         if (epoch + 1) % phase_config['ckpt_freq'] == 0:
-            checkpoint = {
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
-                'epoch': epoch + 1,
-                'train_loss': train_loss,
-                'val_loss': val_loss,
-                'training_history': training_history
-            }
-            torch.save(checkpoint, checkpoint_path)
-            print(f"Checkpoint saved at epoch {epoch+1}")
+            save_checkpoint(model, optimizer, scheduler, epoch + 1, 0, train_loss, checkpoint_path)
     
     # Save final model
     final_path = save_dir / "final_model.pth"
-    torch.save({
-        'model_state_dict': model.state_dict(),
-        'training_history': training_history,
-        'final_epoch': epoch + 1,
-        'best_val_loss': best_val_loss,
-        'best_val_acc': best_val_acc
-    }, final_path)
+    torch.save(model.state_dict(), final_path)
+    print(f"Final model saved to {final_path}")
     
-    print(f"\nPhase training completed!")
-    print(f"Best Val Loss: {best_val_loss:.5f}, Best Val Acc: {best_val_acc:.2f}%")
+    # Save training history
+    history_path = save_dir / "training_history.json"
+    with open(history_path, 'w') as f:
+        # Convert numpy types to Python types for JSON serialization
+        history_json = {}
+        for key, values in training_history.items():
+            history_json[key] = [float(v) for v in values]
+        json.dump(history_json, f, indent=2)
     
+    print(f"Phase training completed! Models saved to {save_dir}")
     return True
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Fixed LSTM Training with Proper Regularization')
+    parser = argparse.ArgumentParser(description='Enhanced LSTM Training with Multi-Phase Support')
     parser.add_argument('--data-dir', type=str, default="/lambda/nfs/LSTM/Lstm/data/alpaca/done/done",
-                       help='Directory containing CSV files')
+                        help='Directory containing CSV files')
     parser.add_argument('--save-dir', type=str, default="/lambda/nfs/LSTM/Lstm/ckpt/3/",
-                       help='Directory to save models and checkpoints')
+                        help='Directory to save models and checkpoints')
     parser.add_argument('--seq-len', type=int, default=50, help='Sequence length')
+    
+    # Training phase arguments
+    parser.add_argument('--phase', type=str, choices=['initial', 'deep', 'fine_tune', 'final', 'custom'],
+                        default='custom', help='Training phase to use')
+    parser.add_argument('--multi-phase', action='store_true',
+                        help='Run all phases sequentially (overrides --phase)')
     
     # Model parameters
     parser.add_argument('--hidden-dim', type=int, default=128, help='Hidden dimension size')
     parser.add_argument('--num-layers', type=int, default=3, help='Number of LSTM layers')
     parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate')
     
-    # Training parameters
-    parser.add_argument('--batch-size', type=int, default=1024, help='Batch size')
-    parser.add_argument('--epochs', type=int, default=70, help='Number of epochs')
-    parser.add_argument('--lr', type=float, default=0.003, help='Learning rate')
-    parser.add_argument('--weight-decay', type=float, default=1e-4, help='Weight decay')
-    parser.add_argument('--grad-clip', type=float, default=1.0, help='Gradient clipping')
+    # Custom hyperparameters (used when phase='custom' or overriding phase defaults)
+    parser.add_argument('--batch-size', type=int, default=None, help='Batch size (overrides phase default)')
+    parser.add_argument('--epochs', type=int, default=50, help='Number of epochs (overrides phase default)')
+    parser.add_argument('--lr', type=float, default=None, help='Learning rate (overrides phase default)')
+    parser.add_argument('--weight-decay', type=float, default=None, help='Weight decay (overrides phase default)')
+    parser.add_argument('--grad-clip', type=float, default=None,
+                        help='Gradient clipping norm (overrides phase default)')
+    parser.add_argument('--ckpt-freq', type=int, default=None, help='Checkpoint frequency (overrides phase default)')
+    parser.add_argument('--eval-freq', type=int, default=None, help='Evaluation frequency (overrides phase default)')
     
-    # Other parameters
+    parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--train-split', type=float, default=0.8, help='Training split ratio')
     parser.add_argument('--n-splits', type=int, default=5, help='Number of time series splits')
     parser.add_argument('--augment', action='store_true', help='Use data augmentation')
     
@@ -532,17 +619,23 @@ def main():
     
     # Check class distribution
     class_counts = df['signal_class'].value_counts().sort_index()
-    print("\nClass distribution in raw data:")
+    print("Class distribution in raw data:")
     for cls, count in class_counts.items():
-        print(f"  Class {cls}: {count:,} samples ({count/len(df)*100:.1f}%)")
+        print(f"  Class {cls}: {count:,} samples ({count / len(df) * 100:.1f}%)")
     
     # Create dataset with augmentation
     dataset = PriceDataset(df, seq_len=args.seq_len, augment=args.augment)
-    print(f"\nDataset created: {len(dataset):,} samples after windowing")
+    print(f"Dataset created: {len(dataset):,} samples after windowing")
     
-    # Get number of classes
+    # Check class distribution after windowing
+    unique_labels, counts = torch.unique(torch.tensor(dataset.y), return_counts=True)
+    print("Class distribution after windowing:")
+    for cls, count in zip(unique_labels.tolist(), counts.tolist()):
+        print(f"  Class {cls}: {count:,} samples ({count / len(dataset) * 100:.1f}%)")
+    
+    # Model setup
     n_classes = int(df['signal_class'].dropna().nunique())
-    input_dim = 27
+    input_dim = 27  # Updated to include volume
     
     # Create time series splits
     splits = create_time_series_splits(dataset, n_splits=args.n_splits)
@@ -552,14 +645,13 @@ def main():
     train_indices = split['train']
     val_indices = split['val']
     
-    print(f"\nUsing first time series split:")
-    print(f"  Train: {len(train_indices)} samples")
-    print(f"  Val: {len(val_indices)} samples")
+    print(f"Train samples: {len(train_indices):,}")
+    print(f"Validation samples: {len(val_indices):,}")
     
-    # Create model with regularization
+    # Create model
     model = ComplexLSTMModel(
         input_dim=input_dim,
-        output_dim=2,
+        output_dim=n_classes,
         hidden_dim=args.hidden_dim,
         num_lstm_layers=args.num_layers,
         dropout=args.dropout
@@ -569,57 +661,116 @@ def main():
     # Calculate class weights
     train_labels = dataset.y[train_indices]
     class_weights = calculate_class_weights(train_labels, n_classes, device, smoothing=0.1)
-    print(f"\nClass weights: {class_weights.tolist()}")
+    print(f"Class weights: {class_weights.tolist()}")
     
     # Loss function with label smoothing
     loss_fn = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
     
-    # Training configuration
-    phase_config = {
-        'name': 'REGULARIZED TRAINING',
-        'epochs': args.epochs,
-        'lr': args.lr,
-        'batch_size': args.batch_size,
-        'weight_decay': args.weight_decay,
-        'grad_clip': args.grad_clip,
-        'ckpt_freq': 10,
-        'eval_freq': 10
-    }
-    
     # Define checkpoint path
     checkpoint_path = save_dir / "checkpoint.pth"
     
-    # Run training
-    print("\n" + "="*60)
-    print("STARTING REGULARIZED TRAINING")
-    print("="*60)
-    
-    success = run_training_phase(
-        model, dataset, train_indices, val_indices, loss_fn, device,
-        n_classes, phase_config, save_dir, checkpoint_path, args
-    )
-    
-    if success:
-        print("\nTraining completed successfully!")
-        print(f"Models saved to: {save_dir}")
+    # Multi-phase training
+    if args.multi_phase:
+        print("\n" + "=" * 60)
+        print("STARTING MULTI-PHASE TRAINING")
+        print("=" * 60)
+        print("Estimated Total Time: 11-22 hours")
+        print("=" * 60)
         
-        # Evaluate on test set (optional)
-        if len(splits) > 1:
-            print("\nEvaluating on test set...")
-            test_indices = splits[0]['test']
-            test_dataset = torch.utils.data.Subset(dataset, test_indices)
-            test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+        phases = ['initial', 'deep', 'fine_tune', 'final']
+        total_start_time = time.time()
+        
+        for i, phase_name in enumerate(phases):
+            phase_config = get_phase_config(phase_name)
+            print_phase_header(phase_config)
             
-            # Load best model
-            best_checkpoint = torch.load(save_dir / "best_model.pth",weights_only=False)
-            model.load_state_dict(best_checkpoint['model_state_dict'])
+            # Run training for this phase
+            success = run_training_phase(
+                model, dataset, train_indices, val_indices, loss_fn, device,
+                n_classes, phase_config, save_dir, checkpoint_path, args
+            )
             
-            test_metrics = evaluate_model(model, test_loader, loss_fn, device, n_classes)
-            print(f"Test Accuracy: {test_metrics['accuracy']*100:.2f}%")
-            print("\nConfusion Matrix:")
-            print(test_metrics['confusion_matrix'])
+            if not success:
+                print(f"\nTraining failed at {phase_config['name']}")
+                return False
+            
+            print(f"\n{phase_config['name']} completed successfully")
+            
+            # Brief pause between phases
+            if i < len(phases) - 1:
+                print("Pausing for 30 seconds before next phase...")
+                time.sleep(30)
+        
+        total_time = time.time() - total_start_time
+        print(f"\n{'=' * 60}")
+        print("COMPLETE MULTI-PHASE TRAINING FINISHED!")
+        print(f"Total training time: {total_time / 3600:.1f} hours")
+        print(f"Final models saved to: {save_dir}")
+        print(f"{'=' * 60}")
+        
     else:
-        print("\nTraining failed!")
+        # Single phase training
+        if args.phase != 'custom':
+            phase_config = get_phase_config(args.phase)
+            print_phase_header(phase_config)
+        else:
+            phase_config = {
+                'name': 'CUSTOM TRAINING',
+                'epochs': args.epochs,
+                'lr': args.lr or 0.001,
+                'batch_size': args.batch_size or 1000,
+                'weight_decay': args.weight_decay or 1e-5,
+                'grad_clip': args.grad_clip or 1.0,
+                'ckpt_freq': args.ckpt_freq or 10,
+                'eval_freq': args.eval_freq or 5,
+                'description': 'Custom training configuration'
+            }
+            print_phase_header(phase_config)
+        
+        # Override with command line arguments if provided
+        if args.batch_size is not None:
+            phase_config['batch_size'] = args.batch_size
+        if args.lr is not None:
+            phase_config['lr'] = args.lr
+        if args.weight_decay is not None:
+            phase_config['weight_decay'] = args.weight_decay
+        if args.grad_clip is not None:
+            phase_config['grad_clip'] = args.grad_clip
+        if args.ckpt_freq is not None:
+            phase_config['ckpt_freq'] = args.ckpt_freq
+        if args.eval_freq is not None:
+            phase_config['eval_freq'] = args.eval_freq
+        
+        success = run_training_phase(
+            model, dataset, train_indices, val_indices, loss_fn, device,
+            n_classes, phase_config, save_dir, checkpoint_path, args
+        )
+        
+        if success:
+            print("\nTraining completed successfully!")
+            
+            # Optional: Evaluate on test set
+            if len(splits) > 1:
+                print("\nEvaluating on test set...")
+                test_indices = splits[0]['test']
+                test_dataset = torch.utils.data.Subset(dataset, test_indices)
+                test_loader = DataLoader(test_dataset, batch_size=phase_config['batch_size'], shuffle=False)
+                
+                # Load best model
+                best_model_path = save_dir / "best_model.pth"
+                if best_model_path.exists():
+                    model.load_state_dict(torch.load(best_model_path, map_location=device))
+                    
+                    test_metrics = evaluate_model(model, test_loader, loss_fn, device, n_classes)
+                    print(f"Test Accuracy: {test_metrics['accuracy']*100:.2f}%")
+                    print(f"Test Loss: {test_metrics['loss']:.5f}")
+                    
+                    print("\nTest Set - Per Class Accuracy:")
+                    for cls, acc in test_metrics['class_accuracies'].items():
+                        samples_count = (test_metrics['targets'] == cls).sum()
+                        print(f"  Class {cls}: {acc:.4f} ({samples_count} samples)")
+        else:
+            print("\nTraining failed!")
 
 
 if __name__ == "__main__":

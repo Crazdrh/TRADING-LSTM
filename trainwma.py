@@ -233,7 +233,7 @@ def get_phase_config(phase_name):
         'deep': {
             'name': 'PHASE 2: DEEP LEARNING',
             'epochs': 130,
-            'lr': 0.001,
+            'lr': 0.0009,
             'batch_size': 1250,  # Increased from 1000
             'weight_decay': 2e-5,
             'grad_clip': 0.8,
@@ -244,7 +244,7 @@ def get_phase_config(phase_name):
         'fine_tune': {
             'name': 'PHASE 3: FINE-TUNING',
             'epochs': 190,
-            'lr': 0.0007,
+            'lr': 0.0006,
             'batch_size': 1024,  # Increased from 800
             'weight_decay': 3e-5,
             'grad_clip': 0.5,
@@ -255,8 +255,8 @@ def get_phase_config(phase_name):
         'final': {
             'name': 'PHASE 4: FINAL OPTIMIZATION',
             'epochs': 230,
-            'lr': 0.0004,
-            'batch_size': 1024,  # Increased from 600
+            'lr': 0.0003,
+            'batch_size': 800,  # Increased from 600
             'weight_decay': 5e-5,
             'grad_clip': 0.3,
             'ckpt_freq': 3,
@@ -356,7 +356,7 @@ def main():
     n_classes = int(df['signal_class'].dropna().nunique())
     input_dim = 27  # Updated to include volume
 
-    model = ComplexLSTMModel(input_dim=input_dim, output_dim=n_classes)
+    model = ComplexLSTMModel(input_dim=input_dim, output_dim=n_classes,hidden_dim=128,dropout=0.5)
     model = model.to(device).float()
 
     # Calculate class weights
